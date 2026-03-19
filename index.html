@@ -1,0 +1,1748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Parametric Diamond Scheme Generator</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: rgba(30, 41, 59, 0.7);
+            --accent: #38bdf8;
+            --text: #e2e8f0;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Control Panel Styles */
+        aside {
+            width: 300px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto;
+            z-index: 10;
+        }
+
+        h2 {
+            margin-top: 0;
+            font-weight: 300;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-size: 1.2rem;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+
+        /* Custom button styles */
+        button, .file-label {
+            background-color: var(--accent);
+            color: var(--bg-color);
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            text-align: center;
+            transition: opacity 0.2s;
+        }
+        .file-label {
+            display: block;
+        }
+        button:hover, .file-label:hover {
+            opacity: 0.9;
+        }
+        /* Button specific overrides */
+        #clearBg {
+            background-color: #64748b;
+            color: var(--text);
+            margin-top: 8px;
+        }
+
+        .value-display {
+            color: var(--accent);
+            font-weight: bold;
+        }
+
+        /* Canvas Area */
+        main {
+            flex-grow: 1;
+            position: relative;
+            display: flex;
+            flex-direction: row;
+            gap: 10px;
+            padding: 10px;
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            transition: background 0.3s ease;
+        }
+
+        .view-container {
+            flex: 1;
+            position: relative;
+            background: rgba(0,0,0,0.2);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 10;
+            cursor: grab;
+        }
+        canvas:active {
+            cursor: grabbing;
+        }
+
+        video, img.overlay-img {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit:contain;
+            z-index: 5; /* Behind canvas */
+            display: none; /* Hidden by default */
+            filter: contrast(100%) brightness(100%);
+            transition: filter 0.3s;
+        }
+        .high-contrast {
+            filter: contrast(150%) brightness(110%) grayscale(100%) !important;
+        }
+        
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.3);
+            pointer-events: none;
+            z-index: 20;
+        }
+
+        .view-label {
+            position: absolute;
+            top: 10px; left: 10px;
+            background: rgba(0,0,0,0.5);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            color: #fff;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .view-toolbar {
+            position: absolute;
+            top: 10px; right: 10px;
+            z-index: 30;
+            display: flex;
+            gap: 5px;
+        }
+        .view-toolbar button, .view-toolbar label.toolbar-btn {
+            padding: 4px 8px;
+            font-size: 1rem;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            cursor: pointer;
+            border-radius: 4px; /* Ensure consistency */
+        }
+        .view-toolbar label.toolbar-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+        }
+        .view-toolbar button:hover, .view-toolbar label.toolbar-btn:hover {
+            background: rgba(56, 189, 248, 0.2);
+        }
+
+        /* Results Section */
+        .results-panel {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+        }
+
+        /* Mobile / Responsive Adjustments */
+        @media (max-width: 800px) {
+            body {
+                flex-direction: column;
+                overflow: auto;
+                height: auto;
+            }
+            aside {
+                width: 100%;
+                height: auto;
+                order: 2;
+                border-right: none;
+                border-top: 1px solid rgba(255, 255, 255, 0.1);
+                box-sizing: border-box;
+                overflow: visible;
+            }
+            main {
+                width: 100%;
+                height: 60vh;
+                order: 1;
+                flex-direction: column;
+            }
+            .legend {
+                display: none; /* Hide legend on small screens */
+            }
+        }
+    </style>
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
+    <script>
+        let cvReady = false;
+        function onOpenCvReady() {
+            cvReady = true;
+            console.log("OpenCV.js successfully loaded and initialized.");
+            document.querySelectorAll('button[title="Loading AI..."]').forEach(btn => {
+                btn.textContent = '🪄';
+                btn.title = 'Auto-Fit to Diamond';
+            });
+        }
+    </script>
+</head>
+<body>
+
+<aside>
+    <h2>Diamond Params</h2>
+    <p style="font-size: 0.8rem; opacity: 0.7;">Adjust proportions to see the geometry change.</p>
+
+    <!-- Controls -->
+    <div class="control-group">
+        <label>Table Width (%) <span id="val-table">57</span></label>
+        <input type="range" id="tablePct" min="40" max="70" value="57" step="1">
+    </div>
+
+    <div class="control-group">
+        <label>Crown Angle (°) <span id="val-crown">34.5</span></label>
+        <input type="range" id="crownAngle" min="20" max="45" value="34.5" step="0.5">
+    </div>
+
+    <div class="control-group">
+        <label>Pavilion Angle (°) <span id="val-pav">40.75</span></label>
+        <input type="range" id="pavAngle" min="35" max="50" value="40.75" step="0.25">
+    </div>
+
+    <div class="control-group">
+        <label>Girdle Thickness (%) <span id="val-girdle">3</span></label>
+        <input type="range" id="girdleThick" min="0.5" max="10" value="3" step="0.5">
+    </div>
+    
+    <div class="control-group">
+        <label>Scale (Zoom) <span id="val-scale">1.0</span></label>
+        <input type="range" id="scale" min="0.1" max="3.0" value="1.0" step="0.1">
+    </div>
+
+    <!-- Calculated Results -->
+    <div class="results-panel">
+        <div class="result-row">
+            <span style="color:#94a3b8">Total Depth</span>
+            <span class="value-display" id="res-total">--%</span>
+        </div>
+        <div class="result-row">
+            <span style="color:#94a3b8">Crown Height</span>
+            <span class="value-display" id="res-crown-h">--%</span>
+        </div>
+        <div class="result-row">
+            <span style="color:#94a3b8">Pavilion Depth</span>
+            <span class="value-display" id="res-pav-d">--%</span>
+        </div>
+        <div class="result-row">
+            <span style="color:#38bdf8">Arrow Limit (Crown)</span>
+            <span class="value-display" id="res-arr">--%</span>
+        </div>
+    </div>
+
+    <div style="margin-top:auto; font-size: 0.75rem; color: #64748b;">
+        Views: Profile (Left) & Plan (Right)
+    </div>
+</aside>
+
+<main>
+    <!-- Profile Container -->
+    <div class="view-container" id="container-profile">
+        <div class="view-label">PROFILE</div>
+        <div class="view-toolbar">
+            <button onclick="toggleCamera('profile')" id="btn-cam-profile" title="Toggle Camera">📹</button>
+            <button onclick="toggleControlMode('profile')" id="btn-mode-profile" title="Control Mode: Diagram">Move: ◇</button>
+            <label class="toolbar-btn" title="Upload Image">
+                📂<input type="file" onchange="handleImageUpload(event, 'profile')" accept="image/*" style="display:none;">
+            </label>
+            <button onclick="pasteFromClipboard('profile')" title="Paste Image">📋</button>
+            <button onclick="clearOverlay('profile')" title="Clear Overlay">✕</button>
+            <span style="border-left:1px solid rgba(255,255,255,0.2); margin:0 4px;"></span>
+            <button onclick="activateThreePoint('profile')" title="3-Point Circle Align">∴</button>
+            <button onclick="cancelThreePoint('profile')" id="btn-3pt-cancel-profile" style="display:none; color:#ef4444;" title="Cancel 3-Point">✕</button>
+            <button onclick="toggleLiveTracking('profile')" title="Loading AI...">⏳</button>
+            <button onclick="resetAlignment('profile')" title="Reset Alignment">⟳</button>
+        </div>
+        <canvas id="canvasProfile"></canvas>
+        <video id="vid-profile" autoplay playsinline muted></video>
+        <img id="img-profile" class="overlay-img" />
+    </div>
+
+    <!-- Plan Container -->
+    <div class="view-container" id="container-plan">
+        <div class="view-label">PLAN</div>
+        <div class="view-toolbar">
+            <button onclick="toggleCamera('plan')" id="btn-cam-plan" title="Toggle Camera">📹</button>
+            <button onclick="toggleControlMode('plan')" id="btn-mode-plan" title="Control Mode: Diagram">Move: ◇</button>
+            <label class="toolbar-btn" title="Upload Image">
+                📂<input type="file" onchange="handleImageUpload(event, 'plan')" accept="image/*" style="display:none;">
+            </label>
+            <button onclick="pasteFromClipboard('plan')" title="Paste Image">📋</button>
+            <button onclick="clearOverlay('plan')" title="Clear Overlay">✕</button>
+            <span style="border-left:1px solid rgba(255,255,255,0.2); margin:0 4px;"></span>
+            <button onclick="activateThreePoint('plan')" title="3-Point Circle Align">∴</button>
+            <button onclick="cancelThreePoint('plan')" id="btn-3pt-cancel-plan" style="display:none; color:#ef4444;" title="Cancel 3-Point">✕</button>
+            <button onclick="toggleLiveTracking('plan')" title="Loading AI...">⏳</button>
+            <button onclick="resetAlignment('plan')" title="Reset Alignment">⟳</button>
+        </div>
+        <canvas id="canvasPlan"></canvas>
+        <video id="vid-plan" autoplay playsinline muted></video>
+        <img id="img-plan" class="overlay-img" />
+        <div class="legend">Parametric Render</div>
+    </div>
+</main>
+
+<script>
+    // Get contexts for both canvases
+    const cvsProfile = document.getElementById('canvasProfile');
+    const ctxProfile = cvsProfile.getContext('2d');
+
+    const cvsPlan = document.getElementById('canvasPlan');
+    const ctxPlan = cvsPlan.getContext('2d');
+
+    // Configuration State
+    const config = {
+        tablePct: 57,
+        crownAngle: 34.5,
+        pavAngle: 40.75,
+        girdleThickPct: 3,
+        scale: 1.0,
+        baseSize: 300 // The "100%" diameter in pixels
+    };
+
+    // UI Elements map
+    const inputs = {
+        tablePct: document.getElementById('tablePct'),
+        crownAngle: document.getElementById('crownAngle'),
+        pavAngle: document.getElementById('pavAngle'),
+        girdleThickPct: document.getElementById('girdleThick'),
+        scale: document.getElementById('scale')
+    };
+
+    // Overlay State
+    let sharedStream = null;
+    const overlays = {
+        profile: { type: null, elVid: document.getElementById('vid-profile'), elImg: document.getElementById('img-profile'), btnCam: document.getElementById('btn-cam-profile') },
+        plan:    { type: null, elVid: document.getElementById('vid-plan'),    elImg: document.getElementById('img-plan'),    btnCam: document.getElementById('btn-cam-plan') }
+    };
+
+    // View State for manual alignment (Pan, Zoom, Rotate)
+    const viewState = {
+        profile: { x: 0, y: 0, scale: 1, rotate: 0, isDragging: false, lastX: 0, lastY: 0 },
+        plan:    { x: 0, y: 0, scale: 1, rotate: 0, isDragging: false, lastX: 0, lastY: 0 }
+    };
+
+    // State for Image Transforms
+    const imageState = {
+        profile: { x: 0, y: 0, scale: 1, rotate: 0 },
+        plan:    { x: 0, y: 0, scale: 1, rotate: 0 }
+    };
+    const controlModes = { profile: 'diagram', plan: 'diagram' }; // 'diagram' or 'image'
+
+    // State for 3-Point Tool
+    let threePointState = { active: false, view: null, points: [], mouseX: -100, mouseY: -100 };
+
+    // Tracking State
+    const trackingState = {
+        profile: { active: false },
+        plan:    { active: false }
+    };
+
+    // Helper: Resize canvas to fit window with high DPI support
+    function resize() {
+        resizeCanvas(cvsProfile);
+        resizeCanvas(cvsPlan);
+        draw();
+    }
+    
+    function resizeCanvas(c) {
+        const parent = c.parentElement;
+        c.width = parent.clientWidth;
+        c.height = parent.clientHeight;
+    }
+
+    // Helper: Convert degrees to radians
+    const rad = (deg) => deg * (Math.PI / 180);
+
+    // Main Draw Function
+    function draw() {
+        // 1. Calculate Geometry shared by both views
+        // Determine base size relative to the smaller canvas to ensure consistent scale if containers differ
+        const minDim = Math.min(cvsProfile.width, cvsProfile.height, cvsPlan.width, cvsPlan.height);
+        const diameter = (minDim * 0.8) * config.scale; // Global scale
+        const radius = diameter / 2;
+        
+        const tableRadius = radius * (config.tablePct / 100);
+        const runCrown = radius - tableRadius;
+        const crownHeight = runCrown * Math.tan(rad(config.crownAngle));
+        
+        const runPavilion = radius; // Pavilion goes to center (approx for culet)
+        const pavilionDepth = runPavilion * Math.tan(rad(config.pavAngle));
+        
+        const girdleThickness = diameter * (config.girdleThickPct / 100);
+
+        // --- CALCULATE & UPDATE PERCENTAGES ---
+        const crownPct = (crownHeight / diameter) * 100;
+        const pavPct = (pavilionDepth / diameter) * 100;
+        const totalDepthPct = crownPct + config.girdleThickPct + pavPct;
+
+        // Calculate Table Reflection Circle using exact optical ray-tracing
+        // The table reflection is the visible image of the table formed by 2 internal reflections.
+        const alpha = rad(config.pavAngle);
+        const tan4a = Math.tan(4 * alpha);
+        const tan_a = Math.tan(alpha);
+        const sin_a = Math.sin(alpha);
+        
+        // K factor simplifies the ray reflection intersection math
+        const K = 1 / (4 * sin_a * sin_a - 1);
+        
+        const H_pct = totalDepthPct; 
+        const rt_pct = config.tablePct / 2;
+        
+        // Exact table reflection radius (x0_pct) where internal ray hits edge of the table
+        const numerator = H_pct * tan4a + rt_pct;
+        const denominator = K * (1 + tan_a * tan4a);
+        
+        let x0_pct = numerator / denominator;
+        
+        // Convert to percentage of table radius
+        let pavReflectionPct = (x0_pct / rt_pct) * 100;
+        
+        // Constrain to physical reality limits (0% to 100%)
+        pavReflectionPct = Math.max(0, Math.min(100, pavReflectionPct));
+
+        // Calculate Crown / Arrowhead Reflection Limit Using Optical Ray Tracing
+        const beta = rad(config.crownAngle);
+        const tan_b = Math.tan(beta);
+        const R_pct = 50; 
+        const D_pct = pavPct; // pavilion depth
+        const kr_t = K * rt_pct;
+        
+        // Use algebraic form that avoids dividing by tan(4a) so it's stable at 45 degrees
+        const num_arrow = kr_t * (tan_a * tan4a + 1) - (D_pct + R_pct * tan_b) * tan4a;
+        const den_arrow = tan_b * tan4a - 1;
+        
+        let x_outer_pct = Math.abs(num_arrow / den_arrow);
+        let crownReflectionPct = (x_outer_pct / R_pct) * 100;
+        crownReflectionPct = Math.max(0, Math.min(100, crownReflectionPct));
+
+        const elResTotal = document.getElementById('res-total');
+        const elResCrown = document.getElementById('res-crown-h');
+        const elResPav = document.getElementById('res-pav-d');
+        const elResArr = document.getElementById('res-arr');
+        
+        if(elResTotal) elResTotal.textContent = totalDepthPct.toFixed(1) + '%';
+        if(elResCrown) elResCrown.textContent = crownPct.toFixed(1) + '%';
+        if(elResPav) elResPav.textContent = pavPct.toFixed(1) + '%';
+        if(elResArr) elResArr.textContent = crownReflectionPct.toFixed(1) + '%';
+        
+        // 2. Render Profile
+        renderProfile(ctxProfile, cvsProfile.width, cvsProfile.height, radius, tableRadius, crownHeight, pavilionDepth, girdleThickness, crownPct, pavPct, totalDepthPct, viewState.profile);
+        if (threePointState.active && threePointState.view === 'profile') {
+            renderThreePointUI(ctxProfile, cvsProfile.width, cvsProfile.height);
+        }
+
+        // 3. Render Plan
+        renderPlan(ctxPlan, cvsPlan.width, cvsPlan.height, radius, tableRadius, pavReflectionPct, crownReflectionPct, viewState.plan);
+        if (threePointState.active && threePointState.view === 'plan') {
+            renderThreePointUI(ctxPlan, cvsPlan.width, cvsPlan.height);
+        }
+    }
+
+    function renderProfile(ctx, w, h, radius, tableRadius, crownHeight, pavilionDepth, girdleThickness, crownPct, pavPct, totalDepthPct, state) {
+        ctx.clearRect(0, 0, w, h);
+        ctx.save();
+        // Apply Manual Alignment
+        ctx.translate((w / 2) + state.x, (h / 2) + state.y);
+        ctx.scale(state.scale, state.scale);
+        ctx.rotate(state.rotate);
+        
+        ctx.strokeStyle = '#38bdf8'; // Diamond Profile Outline Color
+        ctx.lineWidth = 1.5;
+        ctx.lineJoin = 'round';
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.1)'; // Slightly more opaque
+
+        // Coordinates for Profile
+        // Y=0 is the top of the girdle
+        const yTable = -crownHeight;
+        const yGirdleTop = 0;
+        const yGirdleBot = girdleThickness;
+        const yCulet = girdleThickness + pavilionDepth;
+
+        ctx.beginPath();
+        // Top Left (Table edge)
+        ctx.moveTo(-tableRadius, yTable);
+        // Top Right (Table edge)
+        ctx.lineTo(tableRadius, yTable);
+        // Girdle Right Top
+        ctx.lineTo(radius, yGirdleTop);
+        // Girdle Right Bottom
+        ctx.lineTo(radius, yGirdleBot);
+        // Culet (Bottom tip)
+        ctx.lineTo(0, yCulet);
+        // Girdle Left Bottom
+        ctx.lineTo(-radius, yGirdleBot);
+        // Girdle Left Top
+        ctx.lineTo(-radius, yGirdleTop);
+        // Close shape
+        ctx.closePath();
+        
+        ctx.fill();
+        ctx.stroke();
+
+        // Internal Profile Lines (Schematic)
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.3)';
+        ctx.moveTo(-radius, yGirdleTop);
+        ctx.lineTo(radius, yGirdleTop); // Girdle Line
+        ctx.stroke();
+        
+        // Labels for Profile
+        drawDimensionLine(ctx, -radius - 20, yTable, -radius - 20, yGirdleTop, `Crown ${crownPct.toFixed(1)}%`);
+        drawDimensionLine(ctx, -radius - 20, yGirdleBot, -radius - 20, yCulet, `Pavilion ${pavPct.toFixed(1)}%`);
+
+        // Total Depth Dimension
+        drawDimensionLine(ctx, radius + 40, yTable, radius + 40, yCulet, `Depth ${totalDepthPct.toFixed(1)}%`);
+
+        // Angle Measurements
+        // Crown
+        ctx.beginPath();
+        ctx.setLineDash([2, 2]); 
+        ctx.moveTo(-radius, yGirdleTop); ctx.lineTo(-radius + 40, yGirdleTop);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        drawAngleArc(ctx, -radius, yGirdleTop, 25, 0, -rad(config.crownAngle), config.crownAngle);
+
+        // Pavilion
+        ctx.beginPath();
+        ctx.setLineDash([2, 2]); 
+        ctx.moveTo(-radius, yGirdleBot); ctx.lineTo(-radius + 40, yGirdleBot);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        drawAngleArc(ctx, -radius, yGirdleBot, 25, 0, rad(config.pavAngle), config.pavAngle);
+
+        ctx.restore();
+    }
+
+    function renderPlan(ctx, w, h, radius, tableRadius, reflectionPct, crownReflectionPct, state) {
+        ctx.clearRect(0, 0, w, h);
+        ctx.save();
+        // Apply Manual Alignment
+        ctx.translate((w / 2) + state.x, (h / 2) + state.y);
+        ctx.scale(state.scale, state.scale);
+        ctx.rotate(state.rotate);
+
+        ctx.strokeStyle = 'RED';
+        ctx.lineWidth = 1.2;
+
+        // 1. Draw Outer Circle (Girdle)
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // 2. Draw Table (Octagon)
+        // A standard round brilliant table is an octagon.
+        // We rotate it so points align with the star facets
+        const segments = 8;
+        ctx.beginPath();
+        for (let i = 0; i <= segments; i++) {
+            const theta = (i * 2 * Math.PI / segments) + (Math.PI / 8); // Rotate to offset
+            const x = Math.cos(theta) * tableRadius;
+            const y = Math.sin(theta) * tableRadius;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        // 3. Draw Star Facets & Bezel Facets
+        // This connects the table points to the girdle
+        for (let i = 0; i < segments; i++) {
+            const thetaTable = (i * 2 * Math.PI / segments) + (Math.PI / 8);
+            const tx = Math.cos(thetaTable) * tableRadius;
+            const ty = Math.sin(thetaTable) * tableRadius;
+
+            const thetaGirdle = (i * 2 * Math.PI / segments) + (Math.PI / 8);
+            const gx = Math.cos(thetaGirdle) * radius;
+            const gy = Math.sin(thetaGirdle) * radius;
+            
+            // Bezel Facet (Kite shape main lines) - Simplified for schematic
+            // Connect Table corner to Girdle
+            ctx.beginPath();
+            ctx.moveTo(tx, ty);
+            ctx.lineTo(gx, gy);
+            ctx.strokeStyle = 'RED';
+            ctx.stroke();
+            
+            // Star Facets
+            // Connect Table corner to mid-point between girdle points (simplified logic)
+            // Ideally, Star facets meet at a point between table and girdle.
+        }
+        
+        // 4. Draw Pavilion Depth Reflection Control (Dashed Circle)
+        if (reflectionPct > 0) {
+            const rReflect = tableRadius * (reflectionPct / 100);
+            ctx.beginPath();
+            ctx.arc(0, 0, rReflect, 0, Math.PI * 2);
+            ctx.setLineDash([3, 3]);
+            ctx.strokeStyle = 'RED';
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // 5. Draw Crown Angle Arrowhead Boundary (Dotted Blue Circle)
+        if (crownReflectionPct > 0) {
+            const rCrown = radius * (crownReflectionPct / 100);
+            ctx.beginPath();
+            ctx.arc(0, 0, rCrown, 0, Math.PI * 2);
+            ctx.setLineDash([2, 5]);
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 1.0;
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // 6. Draw 8 Arrows (Hearts & Arrows Pattern - Advanced Optical Simulation)
+            if (reflectionPct > 0) {
+                const rReflect = tableRadius * (reflectionPct / 100);
+                
+                ctx.save();
+                
+                // Advanced optical mapping factors
+                const alpha = rad(config.pavAngle);
+                const K_factor = 1 / (4 * Math.sin(alpha) * Math.sin(alpha) - 1);
+                
+                // Physical junction of Lower Halves and Pavilion Mains (approx 75% down)
+                // When mapped to table view, the shaft reaches max visual width here
+                const rJunc_visual = (radius * 0.25) / K_factor; 
+                
+                for (let i = 0; i < 8; i++) {
+                    const theta = (i * Math.PI / 4) + (Math.PI / 8);
+                    ctx.save();
+                    ctx.rotate(theta);
+                    
+                    // --- DRAW SHAFT (The stem inside the table) ---
+                    // "starts wider and keeps getting narrower till the edge of table"
+                    // We calculate the exact optical mapping of the pavilion facet width inside the table!
+                    const rJunc_visual = (radius * 0.25) / K_factor; 
+                    const rEnd_visual = radius / K_factor; // Physical limit of pavilion main facet
+                    
+                    // True physical wedge width at junction (45 degree span / 8 fold symmetry)
+                    const shaftMaxW = rJunc_visual * Math.tan(Math.PI / 8) * 0.95; // robust & much wider
+                    
+                    // Optical function mapping radius to physical facet visual width
+                    function getShaftW(r) {
+                        if (r <= rJunc_visual) return shaftMaxW * (r / rJunc_visual);
+                        if (r >= rEnd_visual) return 0;
+                        return shaftMaxW * (rEnd_visual - r) / (rEnd_visual - rJunc_visual);
+                    }
+                    
+                    const w_Junc = getShaftW(rJunc_visual);
+                    const w_Reflect = getShaftW(rReflect);
+                    const w_Table = getShaftW(tableRadius);
+                    
+                    // Segment 1: Dark retro-reflection (Culet to Table Reflection Limit)
+                    ctx.fillStyle = 'rgba(56, 189, 248, 0.4)'; // Main base
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0); 
+                    if (rReflect > rJunc_visual) {
+                        ctx.lineTo(rJunc_visual, w_Junc);
+                        ctx.lineTo(rReflect, w_Reflect);
+                        ctx.lineTo(rReflect, -w_Reflect);
+                        ctx.lineTo(rJunc_visual, -w_Junc);
+                    } else {
+                        ctx.lineTo(rReflect, w_Reflect);
+                        ctx.lineTo(rReflect, -w_Reflect);
+                    }
+                    ctx.fill();
+                    
+                    // Segment 1 Inner tube
+                    ctx.fillStyle = 'rgba(15, 23, 42, 0.6)';
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    if (rReflect > rJunc_visual) {
+                        ctx.lineTo(rJunc_visual, w_Junc * 0.4);
+                        ctx.lineTo(rReflect, w_Reflect * 0.4);
+                        ctx.lineTo(rReflect, -w_Reflect * 0.4);
+                        ctx.lineTo(rJunc_visual, -w_Junc * 0.4);
+                    } else {
+                        ctx.lineTo(rReflect, w_Reflect * 0.4);
+                        ctx.lineTo(rReflect, -w_Reflect * 0.4);
+                    }
+                    ctx.fill();
+                    
+                    // Segment 2: Bright Extension (Table Reflection Limit to Table Edge)
+                    // "very thick and they go thinner until they touch the inner edge of the table"
+                    if (tableRadius > rReflect) {
+                        ctx.fillStyle = 'rgba(56, 189, 248, 0.12)'; // Faint continuation
+                        ctx.beginPath();
+                        ctx.moveTo(rReflect, w_Reflect);
+                        ctx.lineTo(tableRadius, w_Table);
+                        ctx.lineTo(tableRadius, -w_Table);
+                        ctx.lineTo(rReflect, -w_Reflect);
+                        ctx.fill();
+                        
+                        ctx.fillStyle = 'rgba(15, 23, 42, 0.2)'; // Faint inner tube
+                        ctx.beginPath();
+                        ctx.moveTo(rReflect, w_Reflect * 0.4);
+                        ctx.lineTo(tableRadius, w_Table * 0.4);
+                        ctx.lineTo(tableRadius, -w_Table * 0.4);
+                        ctx.lineTo(rReflect, -w_Reflect * 0.4);
+                        ctx.fill();
+                    }
+                    
+                    // --- DRAW ARROWHEAD (Through the bezel facet) ---
+                    // "push the arrows back to the girdle and somewhere they refract (maybe around 70%)... 
+                    // so when they refract they go back to narrow tword the table edge."
+                    // This physically matches the lower-half junction!
+                    if (crownReflectionPct > 0) {
+                        // Modulate thickness actively by crown angle refraction properties
+                        const baseBeta = Math.tan(34.5 * Math.PI / 180);
+                        const currentBeta = Math.tan(rad(config.crownAngle));
+                        const widthMod = currentBeta / baseBeta;
+                        
+                        const headMaxW = (radius * 0.08) * widthMod; // Widest at ~75%
+                        const headBaseW = headMaxW * 0.35;           // Narrows toward table edge
+                        
+                        const rArrowTip = radius; // Touching the girdle
+                        const rWidest = radius * 0.72; // Widest optical point
+                        const indentX = tableRadius + (rArrowTip - tableRadius) * 0.15; 
+                        
+                        ctx.fillStyle = 'rgba(56, 189, 248, 0.6)'; 
+                        ctx.beginPath();
+                        ctx.moveTo(rArrowTip, 0);          // Tip boundary at girdle
+                        ctx.lineTo(rWidest, headMaxW);     // Widest point at lower-half junction
+                        ctx.lineTo(tableRadius, headBaseW);// Narrows down to table edge
+                        ctx.lineTo(indentX, 0);            // Chevron indent base
+                        ctx.lineTo(tableRadius, -headBaseW);
+                        ctx.lineTo(rWidest, -headMaxW);
+                        ctx.fill();
+                    }
+                    
+                    ctx.restore();
+                }
+                ctx.restore();
+            }
+        }
+
+        // Draw simple crosshair for center reference
+        ctx.beginPath();
+        ctx.moveTo(-5, 0); ctx.lineTo(5, 0);
+        ctx.moveTo(0, -5); ctx.lineTo(0, 5);
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    function renderThreePointUI(ctx, w, h) {
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform to draw in screen pixels
+        
+        // Instruction Text
+        ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+        ctx.fillRect(0, h - 40, w, 40);
+        ctx.fillStyle = "#38bdf8";
+        ctx.font = "bold 14px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const step = threePointState.points.length + 1;
+        ctx.fillText(`Click point ${step} of 3 on the circle edge`, w / 2, h - 20);
+
+        // Draw Points
+        threePointState.points.forEach((p, i) => {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+            ctx.fillStyle = "#ef4444";
+            ctx.fill();
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            // Draw line connecting
+            if (i > 0) {
+                ctx.beginPath();
+                ctx.moveTo(threePointState.points[i-1].x, threePointState.points[i-1].y);
+                ctx.lineTo(p.x, p.y);
+                ctx.strokeStyle = "#ef4444";
+                ctx.lineWidth = 1;
+                ctx.setLineDash([5, 5]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        });
+
+        // Draw Loupe (Magnifier)
+        if (threePointState.mouseX > 0) {
+            const mx = threePointState.mouseX;
+            const my = threePointState.mouseY;
+            const zoom = 3;
+            const r = 60;
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(mx, my, r, 0, Math.PI * 2);
+            ctx.clip();
+
+            // Draw background fill to hide non-magnified content behind loupe
+            ctx.fillStyle = "#0f172a";
+            ctx.fillRect(mx - r, my - r, r * 2, r * 2);
+
+            // Draw Magnified Image
+            const viewName = threePointState.view;
+            const ov = overlays[viewName];
+            let source = null;
+            if (ov.type === 'camera' && ov.elVid.style.display !== 'none') source = ov.elVid;
+            else if (ov.type === 'image' && ov.elImg.style.display !== 'none') source = ov.elImg;
+
+            if (source) {
+                ctx.translate(mx, my);
+                ctx.scale(zoom, zoom);
+                ctx.translate(-mx, -my);
+                drawTransformedImage(ctx, source, imageState[threePointState.view], w, h);
+            }
+            ctx.restore();
+
+            // Loupe Border & Crosshair
+            ctx.beginPath();
+            ctx.arc(mx, my, r, 0, Math.PI * 2);
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(mx - 10, my); ctx.lineTo(mx + 10, my);
+            ctx.moveTo(mx, my - 10); ctx.lineTo(mx, my + 10);
+            ctx.strokeStyle = "#ef4444";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+
+    // Helper to draw angle arcs
+    function drawAngleArc(ctx, x, y, r, start, end, val) {
+        ctx.beginPath();
+        ctx.strokeStyle = '#38bdf8';
+        const ccw = end < start;
+        ctx.arc(x, y, r, start, end, ccw);
+        ctx.stroke();
+        
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        // Simple offset placement
+        const labelY = y + (ccw ? -12 : 12);
+        ctx.fillText(val + '°', x + r + 5, labelY);
+    }
+
+    // Helper to draw schematic dimension lines
+    function drawDimensionLine(ctx, x1, y1, x2, y2, text) {
+        ctx.save();
+        ctx.strokeStyle = '#64748b';
+        ctx.fillStyle = '#64748b';
+        ctx.lineWidth = 1;
+        ctx.font = '10px sans-serif';
+        
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        
+        // Ticks
+        ctx.beginPath();
+        ctx.moveTo(x1 - 3, y1); ctx.lineTo(x1 + 3, y1);
+        ctx.moveTo(x2 - 3, y2); ctx.lineTo(x2 + 3, y2);
+        ctx.stroke();
+        
+        // Text
+        const midY = (y1 + y2) / 2;
+        ctx.textBaseline = 'middle';
+        
+        if (x1 > 0) {
+            ctx.textAlign = 'left';
+            ctx.fillText(text, x1 + 5, midY);
+        } else {
+            ctx.textAlign = 'right';
+            ctx.fillText(text, x1 - 5, midY);
+        }
+        
+        ctx.restore();
+    }
+
+    // --- Camera and Overlay Logic ---
+
+    async function toggleCamera(viewName) {
+        const ov = overlays[viewName];
+        
+        // Stop live tracking if active
+        if (trackingState[viewName].active) {
+            toggleLiveTracking(viewName);
+        }
+
+        if (ov.type === 'camera') {
+            // STOP Camera for this view
+            ov.elVid.srcObject = null;
+            ov.elVid.style.display = 'none';
+            ov.type = null;
+            ov.btnCam.style.background = ''; // Remove active style
+
+            // If no other view is using camera, stop stream
+            if (overlays.profile.type !== 'camera' && overlays.plan.type !== 'camera' && sharedStream) {
+                sharedStream.getTracks().forEach(t => t.stop());
+                sharedStream = null;
+            }
+        } else {
+            // START Camera
+            try {
+                // Clear image if exists
+                clearOverlay(viewName);
+                
+                let stream = null;
+                // Reuse existing stream if available
+                if (sharedStream && sharedStream.active) {
+                    stream = sharedStream;
+                } else if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                } else if (navigator.webkitGetUserMedia) {
+                    stream = await new Promise((resolve, reject) => {
+                        navigator.webkitGetUserMedia({ video: true }, resolve, reject);
+                    });
+                }
+                // 3. Try Mozilla Legacy
+                else if (navigator.mozGetUserMedia) {
+                    stream = await new Promise((resolve, reject) => {
+                        navigator.mozGetUserMedia({ video: true }, resolve, reject);
+                    });
+                } else {
+                    if (!window.isSecureContext) {
+                        throw new Error("INSECURE_CONTEXT");
+                    }
+                    throw new Error("API_MISSING");
+                }
+
+                sharedStream = stream;
+                ov.elVid.srcObject = sharedStream;
+                ov.elVid.style.display = 'block';
+                ov.type = 'camera';
+                ov.btnCam.style.background = '#ef4444'; // Red for stop
+            } catch (err) {
+                console.error("Error accessing camera:", err);
+                
+                if (err.message === "INSECURE_CONTEXT" || !window.isSecureContext) {
+                    alert(`⚠️ CAMERA BLOCKED ON LAN IP\n\nBrowsers block camera access on LAN IPs by default.\n\nTO FIX ON SAMSUNG/CHROME:\n1. Copy this: http://${location.host}\n2. Go to: chrome://flags/#unsafely-treat-insecure-origin-as-secure\n3. Set to ENABLED and paste the address.\n4. Tap Relaunch.`);
+                } else {
+                    alert(`Camera Error: ${err.message}`);
+                }
+                sharedStream = null;
+            }
+        }
+    }
+
+    function handleImageUpload(event, viewName) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        const ov = overlays[viewName];
+        
+        // Stop camera if running on this view
+        if (ov.type === 'camera') toggleCamera(viewName);
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            ov.elImg.src = e.target.result;
+            ov.elImg.style.display = 'block';
+            ov.type = 'image';
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async function pasteFromClipboard(viewName) {
+        try {
+            if (!navigator.clipboard || !navigator.clipboard.read) {
+                alert("Clipboard API not supported in your browser or insecure context. Try using Ctrl+V / Cmd+V instead.");
+                return;
+            }
+            const clipboardItems = await navigator.clipboard.read();
+            for (const clipboardItem of clipboardItems) {
+                const imageTypes = clipboardItem.types.filter(type => type.startsWith('image/'));
+                if (imageTypes.length === 0) continue;
+                
+                const blob = await clipboardItem.getType(imageTypes[0]);
+                const ov = overlays[viewName];
+                if (ov.type === 'camera') toggleCamera(viewName);
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    ov.elImg.src = e.target.result;
+                    ov.elImg.style.display = 'block';
+                    ov.type = 'image';
+                };
+                reader.readAsDataURL(blob);
+                return;
+            }
+            alert("No image found in clipboard!");
+        } catch (err) {
+            console.error("Paste error", err);
+            alert("Could not paste: " + err.message + "\nTry using Ctrl+V or Cmd+V directly.");
+        }
+    }
+
+    // Global Paste handling targeting the active view
+    let activeViewForPaste = 'profile'; 
+    document.addEventListener('mouseover', (e) => {
+        if (e.target.closest('#container-profile')) activeViewForPaste = 'profile';
+        if (e.target.closest('#container-plan')) activeViewForPaste = 'plan';
+    });
+
+    window.addEventListener('paste', (e) => {
+        if (!e.clipboardData) return;
+        const items = e.clipboardData.items;
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.startsWith('image/')) {
+                e.preventDefault();
+                const blob = items[i].getAsFile();
+                const ov = overlays[activeViewForPaste];
+                if (ov.type === 'camera') toggleCamera(activeViewForPaste);
+                
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    ov.elImg.src = ev.target.result;
+                    ov.elImg.style.display = 'block';
+                    ov.type = 'image';
+                };
+                reader.readAsDataURL(blob);
+                
+                // Visual feedback
+                const container = document.getElementById(`container-${activeViewForPaste}`);
+                const oldShadow = container.style.boxShadow;
+                container.style.boxShadow = 'inset 0 0 20px #38bdf8';
+                setTimeout(() => container.style.boxShadow = oldShadow, 500);
+                return;
+            }
+        }
+    });
+
+    function clearOverlay(viewName) {
+        const ov = overlays[viewName];
+        if (ov.type === 'camera') toggleCamera(viewName); // Properly stop camera
+        ov.elImg.src = '';
+        ov.elImg.style.display = 'none';
+        ov.type = null;
+    }
+
+    function resetAlignment(viewName) {
+        viewState[viewName] = { x: 0, y: 0, scale: 1, rotate: 0, isDragging: false, lastX: 0, lastY: 0 };
+        draw();
+    }
+
+    function toggleControlMode(viewName) {
+        const btn = document.getElementById(`btn-mode-${viewName}`);
+        if (controlModes[viewName] === 'diagram') {
+            controlModes[viewName] = 'image';
+            btn.textContent = 'Move: 🖼️';
+            btn.title = 'Control Mode: Image';
+            btn.style.background = 'rgba(56, 189, 248, 0.4)';
+        } else {
+            controlModes[viewName] = 'diagram';
+            btn.textContent = 'Move: ◇';
+            btn.title = 'Control Mode: Diagram';
+            btn.style.background = '';
+        }
+    }
+
+    // --- Live Tracking Logic ---
+    function toggleLiveTracking(viewName) {
+        if (!cvReady) {
+            alert("Auto-Fit AI is still loading. Please wait a moment.");
+            return;
+        }
+        const ov = overlays[viewName];
+        if (ov.type !== 'camera') {
+            // Fallback for static image: just align once
+            autoAlign(viewName, false);
+            return;
+        }
+        
+        trackingState[viewName].active = !trackingState[viewName].active;
+        const btn = document.querySelector(`#container-${viewName} button[title="Auto-Fit to Diamond"]`);
+        
+        if (trackingState[viewName].active) {
+            btn.style.backgroundColor = '#10b981'; // Green to indicate active
+            runTrackingLoop(viewName);
+        } else {
+            btn.style.backgroundColor = '';
+        }
+    }
+
+    function runTrackingLoop(viewName) {
+        if (!trackingState[viewName].active) return;
+        if (overlays[viewName].type !== 'camera') {
+            toggleLiveTracking(viewName); // Stop if camera stopped
+            return;
+        }
+
+        // Run detection logic in "live" mode with safety
+        try {
+            autoAlign(viewName, true);
+        } catch (e) {
+            console.warn("Tracking error:", e);
+        }
+        
+        requestAnimationFrame(() => runTrackingLoop(viewName));
+    }
+
+    // Reusable canvas for detection to prevent GC stutter
+    const detectCanvas = document.createElement('canvas');
+    const detectCtx = detectCanvas.getContext('2d', { willReadFrequently: true });
+
+    // --- Auto-Alignment & Detection ---
+    function autoAlign(viewName, isLive = false) {
+        if (!cvReady) return;
+
+        const ov = overlays[viewName];
+        const canvas = (viewName === 'profile') ? cvsProfile : cvsPlan;
+        const width = canvas.width;
+        const height = canvas.height;
+        const ist = imageState[viewName];
+        
+        // Scale for detection performance (OpenCV handles scaling well, max 400px is good for fast accurate results)
+        const scale = Math.min(1, 400 / Math.max(width, height));
+        const dw = Math.floor(width * scale);
+        const dh = Math.floor(height * scale);
+
+        detectCanvas.width = dw;
+        detectCanvas.height = dh;
+        
+        // Correctly scale the Translation component of Image State for the downsized canvas
+        const scaledIst = {
+            x: ist.x * scale,
+            y: ist.y * scale,
+            scale: ist.scale,
+            rotate: ist.rotate
+        };
+
+        // 1. Render scaled image
+        if (ov.type === 'camera' && ov.elVid.style.display !== 'none') {
+            // Capture current video frame
+            drawTransformedImage(detectCtx, ov.elVid, scaledIst, dw, dh);
+
+            if (!isLive) {
+                // Normal freeze behavior: Cache as image reference
+                ov.elImg.src = detectCanvas.toDataURL();
+                
+                // Stop camera stream cleanly
+                toggleCamera(viewName); 
+                
+                // Switch UI to Image mode
+                ov.type = 'image';
+                ov.elImg.style.display = 'block';
+            }
+        } else if (ov.type === 'image' && ov.elImg.src) {
+            // Use existing image
+            drawTransformedImage(detectCtx, ov.elImg, scaledIst, dw, dh);
+        } else {
+            if (!isLive) alert("Please start the camera or upload an image to use Auto-Fit.");
+            return;
+        }
+
+        // 2. OpenCV Detection Pipeline
+        let src = null;
+        let gray = new cv.Mat();
+        let blurred = new cv.Mat();
+        let edges = new cv.Mat();
+        let contours = new cv.MatVector();
+        let hierarchy = new cv.Mat();
+
+        try {
+            const imgData = detectCtx.getImageData(0, 0, dw, dh);
+            src = cv.matFromImageData(imgData);
+            
+            // Grayscale
+            cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+            
+            // Blur for noise reduction
+            cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0, 0);
+            
+            // Canny edge detection
+            cv.Canny(blurred, edges, 40, 120, 3, false);
+            
+            // Dilation to combine broken edges across facets
+            let M = cv.Mat.ones(3, 3, cv.CV_8U);
+            cv.dilate(edges, edges, M, new cv.Point(-1, -1), 1, cv.BORDER_CONSTANT, cv.morphologyDefaultBorderValue());
+            M.delete();
+
+            // Find Contours
+            cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+            
+            let maxArea = 0;
+            let bestIdx = -1;
+            
+            // Temporal tracking initialization
+            if (!trackingState[viewName].lastPos) {
+                trackingState[viewName].lastPos = {x: dw/2, y: dh/2, confidence: 0};
+            }
+            let lastP = trackingState[viewName].lastPos;
+
+            // Only consider contours that match the expected shapes (Circle for Plan, Polygon for Profile)
+            for (let i = 0; i < contours.size(); ++i) {
+                let cnt = contours.get(i);
+                let area = cv.contourArea(cnt, false);
+                
+                if (area < 100) { 
+                    cnt.delete();
+                    continue; 
+                }
+
+                let rect = cv.boundingRect(cnt);
+                let cx = rect.x + rect.width / 2;
+                let cy = rect.y + rect.height / 2;
+                
+                // If we have a good lock from prior frames, strongly penalize teleporting outside a search radius
+                let distSq = Math.pow(cx - dw/2, 2) + Math.pow(cy - dh/2, 2);
+                let maxDistSq = (dw*dw + dh*dh) / 4;
+                let weight = Math.max(0.01, 1 - (distSq / maxDistSq)); // Basic center weight
+                
+                if (lastP.confidence > 0.5 && isLive) {
+                    let temporalDistSq = Math.pow(cx - lastP.x, 2) + Math.pow(cy - lastP.y, 2);
+                    let lockRadiusSq = Math.pow(Math.max(dw,dh) * 0.35, 2); // 35% screen size radius
+                    if (temporalDistSq > lockRadiusSq) {
+                        // Too far from known good location, reject it to prevent teleportation
+                        weight = 0; 
+                    } else {
+                        weight *= 2.0; // Boost weight for things near known location
+                    }
+                }
+
+                if (weight === 0) {
+                    cnt.delete();
+                    continue;
+                }
+
+                let perimeter = cv.arcLength(cnt, true);
+                let circularity = (perimeter === 0) ? 0 : (4 * Math.PI * area) / (perimeter * perimeter);
+                let aspect = rect.width / rect.height;
+                
+                let score = 0;
+                
+                if (viewName === 'plan') {
+                    // Plan view: Circularity check (perfect circle = 1.0, typical noisy diamond outline > 0.5)
+                    if (circularity > 0.5) {
+                        score = area * circularity * weight;
+                    }
+                } else {
+                    // Profile view: Solidity & Aspect check
+                    let hull = new cv.Mat();
+                    cv.convexHull(cnt, hull, false, true);
+                    let hullArea = cv.contourArea(hull, false);
+                    let solidity = (hullArea === 0) ? 0 : area / hullArea;
+                    hull.delete();
+                    
+                    // Diamond profile is typically convex and wider than tall, roughly aspect 1.2 to 3.5
+                    if (aspect > 0.8 && aspect < 4.5 && solidity > 0.6) {
+                        score = area * solidity * weight;
+                    }
+                }
+                
+                if (score > maxArea) {
+                    maxArea = score;
+                    bestIdx = i;
+                }
+                cnt.delete();
+            }
+
+            if (bestIdx !== -1) {
+                let bestCnt = contours.get(bestIdx);
+                let boxCX, boxCY, objectSize;
+
+                if (viewName === 'plan') {
+                    // Exact circular fit
+                    let circle = cv.minEnclosingCircle(bestCnt);
+                    boxCX = circle.center.x;
+                    boxCY = circle.center.y;
+                    objectSize = circle.radius * 2;
+                } else {
+                    // Bounding Box fit for profile
+                    let rect = cv.boundingRect(bestCnt);
+                    boxCX = rect.x + rect.width / 2;
+                    boxCY = rect.y + rect.height / 2;
+                    objectSize = Math.max(rect.width, rect.height);
+                }
+                bestCnt.delete();
+                
+                // Update tracking lock
+                lastP.x = boxCX;
+                lastP.y = boxCY;
+                lastP.confidence = Math.min(1.0, lastP.confidence + 0.1);
+
+                // Convert back from downscaled canvas coordinates
+                boxCX /= scale;
+                boxCY /= scale;
+                objectSize /= scale;
+
+                const minDim = Math.min(cvsProfile.width, cvsProfile.height, cvsPlan.width, cvsPlan.height);
+                const baseDiameter = (minDim * 0.8) * config.scale; // The size the chart normally draws at scale 1.0 (relative to slider)
+                
+                const targetX = boxCX - (width / 2);
+                const targetY = boxCY - (height / 2);
+                const targetScale = objectSize / baseDiameter;
+
+                // We adjust the view scale multiplier
+                if (isLive) {
+                    // Smoother interpolation (Lerp) for face-filter feel
+                    const lerpSpeed = 0.25; 
+                    
+                    let dx = targetX - viewState[viewName].x;
+                    let dy = targetY - viewState[viewName].y;
+                    let dScale = targetScale - viewState[viewName].scale;
+                    
+                    if (Math.abs(dx) < 200 && Math.abs(dy) < 200) {
+                        viewState[viewName].x += dx * lerpSpeed;
+                        viewState[viewName].y += dy * lerpSpeed;
+                        viewState[viewName].scale += dScale * lerpSpeed;
+                    }
+                } else {
+                    // Instant snap for static alignment
+                    viewState[viewName].x = targetX;
+                    viewState[viewName].y = targetY;
+                    viewState[viewName].scale = targetScale;
+                }
+
+                draw();
+            } else {
+                // Diminish tracking memory confidence if we fail to find the diamond this frame
+                if (isLive && lastP) {
+                    lastP.confidence = Math.max(0, lastP.confidence - 0.05);
+                }
+            }
+
+        } catch (e) {
+            console.error("OpenCV AutoAlign Error: ", e);
+        } finally {
+            // Memory Management
+            if (src) src.delete();
+            gray.delete();
+            blurred.delete();
+            edges.delete();
+            contours.delete();
+            hierarchy.delete();
+        }
+    }
+    // --- Transformed Drawing Helper ---
+    function drawTransformedImage(ctx, img, ist, w, h) {
+        ctx.save();
+        ctx.translate(w/2 + ist.x, h/2 + ist.y);
+        ctx.rotate(ist.rotate);
+        ctx.scale(ist.scale, ist.scale);
+        ctx.translate(-w/2, -h/2);
+        drawImageProp(ctx, img, 0, 0, w, h);
+        ctx.restore();
+    }
+    // --- 3-Point Alignment Logic ---
+    function activateThreePoint(viewName) {
+        // Hide other button if active
+        if (threePointState.active && threePointState.view && threePointState.view !== viewName) {
+            document.getElementById(`btn-3pt-cancel-${threePointState.view}`).style.display = 'none';
+        }
+        
+        threePointState = { active: true, view: viewName, points: [], mouseX: -100, mouseY: -100 };
+        const cvs = (viewName === 'profile') ? cvsProfile : cvsPlan;
+        cvs.style.cursor = 'crosshair';
+        document.getElementById(`btn-3pt-cancel-${viewName}`).style.display = 'block';
+        draw();
+    }
+
+    function cancelThreePoint(viewName) {
+        threePointState = { active: false, view: null, points: [], mouseX: -100, mouseY: -100 };
+        const cvs = (viewName === 'profile') ? cvsProfile : cvsPlan;
+        cvs.style.cursor = 'grab';
+        document.getElementById(`btn-3pt-cancel-${viewName}`).style.display = 'none';
+        draw();
+    }
+
+    function handleThreePointClick(e, viewName) {
+        const cvs = (viewName === 'profile') ? cvsProfile : cvsPlan;
+        const rect = cvs.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        threePointState.points.push({ x, y });
+
+        if (threePointState.points.length === 3) {
+            finishThreePointAlign();
+        } else {
+            draw();
+        }
+    }
+    
+    function handleThreePointTouch(e, viewName) {
+        e.preventDefault(); // Prevent scrolling
+        const touch = e.touches[0];
+        const mouseEvent = new MouseEvent("mousedown", {
+            clientX: touch.clientX,
+            clientY: touch.clientY
+        });
+        handleThreePointClick(mouseEvent, viewName);
+    }
+
+    function finishThreePointAlign() {
+        const pts = threePointState.points;
+        const viewName = threePointState.view;
+        
+        document.getElementById(`btn-3pt-cancel-${viewName}`).style.display = 'none';
+        
+        // Calculate Circle Center and Radius from 3 points
+        // Using determinant method or perpendicular bisectors
+        const x1 = pts[0].x, y1 = pts[0].y;
+        const x2 = pts[1].x, y2 = pts[1].y;
+        const x3 = pts[2].x, y3 = pts[2].y;
+
+        const D = 2 * (x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2));
+        
+        if (Math.abs(D) < 0.001) {
+            alert("Points are collinear. Please try again.");
+            threePointState = { active: false, view: null, points: [] };
+            draw();
+            return;
+        }
+
+        const Ux = ((x1*x1 + y1*y1) * (y2 - y3) + (x2*x2 + y2*y2) * (y3 - y1) + (x3*x3 + y3*y3) * (y1 - y2)) / D;
+        const Uy = ((x1*x1 + y1*y1) * (x3 - x2) + (x2*x2 + y2*y2) * (x1 - x3) + (x3*x3 + y3*y3) * (x2 - x1)) / D;
+
+        const r = Math.sqrt((x1 - Ux)**2 + (y1 - Uy)**2);
+
+        // Update View State
+        const cvs = (viewName === 'profile') ? cvsProfile : cvsPlan;
+        viewState[viewName].x = Ux - (cvs.width / 2);
+        viewState[viewName].y = Uy - (cvs.height / 2);
+        
+        const minDim = Math.min(cvsProfile.width, cvsProfile.height, cvsPlan.width, cvsPlan.height);
+        const baseDiameter = (minDim * 0.8) * config.scale;
+        viewState[viewName].scale = (r * 2) / baseDiameter;
+
+        // Reset Tool
+        threePointState = { active: false, view: null, points: [], mouseX: -100, mouseY: -100 };
+        cvs.style.cursor = 'grab';
+        draw();
+    }
+
+    // --- Freeze/Unfreeze Functionality ---
+    function toggleFreeze(viewName) {
+        const ov = overlays[viewName];
+        
+        // Ensure live tracking is off before freezing
+        if (trackingState[viewName].active) toggleLiveTracking(viewName);
+
+        if (ov.type === 'camera') {
+            // 1. Freeze: Capture frame
+            const tempCanvas = document.createElement('canvas');
+            // Match video native resolution
+            const w = ov.elVid.videoWidth;
+            const h = ov.elVid.videoHeight;
+            if(w === 0 || h === 0) return; // Video not ready
+            
+            tempCanvas.width = w;
+            tempCanvas.height = h;
+            tempCanvas.getContext('2d').drawImage(ov.elVid, 0, 0, w, h);
+            
+            // Capture the video frame to the image element
+            ov.elImg.src = tempCanvas.toDataURL('image/jpeg', 0.9);
+
+            ov.elImg.style.display = 'block';
+            
+            // 2. Stop Camera logic manually to keep state clean
+            ov.elVid.srcObject = null;
+            ov.elVid.style.display = 'none';
+            ov.type = 'image';
+            ov.btnCam.style.background = ''; // Camera inactive
+            
+            // Stop shared stream if unused
+            const otherView = viewName === 'profile' ? 'plan' : 'profile';
+            if (overlays[otherView].type !== 'camera' && sharedStream) {
+                sharedStream.getTracks().forEach(t => t.stop());
+                sharedStream = null;
+            }
+            
+            // 3. Auto-Align immediately after freeze
+            autoAlign(viewName, false);
+
+        } else {
+            // If nothing active, just start camera
+            toggleCamera(viewName);
+        }
+    }
+
+    // Helper for Object-Fit: Contain drawing on canvas (Matches CSS)
+    function drawImageProp(ctx, img, x, y, w, h, offsetX, offsetY) {
+        if (arguments.length === 2) {
+            x = y = 0;
+            w = ctx.canvas.width;
+            h = ctx.canvas.height;
+        }
+
+        const iw = img.naturalWidth || img.videoWidth || img.width;
+        const ih = img.naturalHeight || img.videoHeight || img.height;
+        if (!iw || !ih) return;
+
+        // Contain logic: Scale to fit within w/h while maintaining aspect ratio
+        const r = Math.min(w / iw, h / ih);
+        const nw = iw * r;
+        const nh = ih * r;
+        
+        // Center alignment
+        const dx = x + (w - nw) * 0.5;
+        const dy = y + (h - nh) * 0.5;
+
+        ctx.drawImage(img, 0, 0, iw, ih, dx, dy, nw, nh);
+    }
+
+    // --- Interaction Logic (Pan/Zoom/Rotate) ---
+    function attachInteraction(canvas, viewName) {
+        // Mouse Events
+        canvas.addEventListener('mousedown', (e) => {
+            if (threePointState.active && threePointState.view === viewName) {
+                handleThreePointClick(e, viewName);
+            } else {
+                startDrag(e, viewName);
+            }
+        });
+        window.addEventListener('mousemove', (e) => drag(e, viewName));
+        window.addEventListener('mouseup', () => endDrag(viewName));
+        
+        // Loupe Movement
+        canvas.addEventListener('mousemove', (e) => {
+            if (threePointState.active && threePointState.view === viewName) {
+                const rect = canvas.getBoundingClientRect();
+                threePointState.mouseX = e.clientX - rect.left;
+                threePointState.mouseY = e.clientY - rect.top;
+                draw();
+            }
+        });
+
+        // Touch Events for 3-Point
+        canvas.addEventListener('touchstart', (e) => {
+             if (threePointState.active && threePointState.view === viewName) handleThreePointTouch(e, viewName);
+        }, { passive: false });
+
+        // Wheel (Zoom + Rotate with Shift)
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const mode = controlModes[viewName];
+            const s = (mode === 'diagram') ? viewState[viewName] : imageState[viewName];
+            
+            if (e.shiftKey) {
+                // Rotate
+                s.rotate += e.deltaY * 0.002;
+            } else {
+                // Zoom
+                s.scale -= e.deltaY * 0.001;
+                s.scale = Math.max(0.01, Math.min(s.scale, 5));
+            }
+            
+            if (mode === 'image') updateImageTransform(viewName);
+            draw();
+        });
+        
+        // --- TOUCH INTERACTION (Pinch/Zoom/Drag/Tap) ---
+        let touchStartDist = 0;
+        let touchStartAngle = 0;
+        let initialScale = 1;
+        let initialRotate = 0;
+        
+        canvas.addEventListener('touchstart', (e) => {
+            // Tap to freeze check
+            if (e.touches.length === 1 && overlays[viewName].type === 'camera' && !threePointState.active) {
+                toggleFreeze(viewName);
+                return;
+            }
+
+            if (threePointState.active) return; // Let 3-point logic handle it
+            e.preventDefault();
+            
+            if (e.touches.length === 1) {
+                startDrag({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY }, viewName);
+            } else if (e.touches.length === 2) {
+                touchStartDist = getTouchDist(e.touches);
+                touchStartAngle = getTouchAngle(e.touches);
+                
+                const mode = controlModes[viewName];
+                const s = (mode === 'diagram') ? viewState[viewName] : imageState[viewName];
+                initialScale = s.scale;
+                initialRotate = s.rotate;
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (threePointState.active) {
+                // Update Loupe position for touch
+                 const rect = canvas.getBoundingClientRect();
+                 threePointState.mouseX = e.touches[0].clientX - rect.left;
+                 threePointState.mouseY = e.touches[0].clientY - rect.top;
+                 draw();
+                 return;
+            }
+            
+            e.preventDefault();
+            const mode = controlModes[viewName];
+            const s = (mode === 'diagram') ? viewState[viewName] : imageState[viewName];
+
+            if (e.touches.length === 1) {
+                 drag({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY }, viewName);
+            } else if (e.touches.length === 2) {
+                // Pinch Zoom
+                const dist = getTouchDist(e.touches);
+                const scaleFactor = dist / touchStartDist;
+                s.scale = Math.max(0.01, Math.min(initialScale * scaleFactor, 5));
+                
+                // Rotate
+                const angle = getTouchAngle(e.touches);
+                s.rotate = initialRotate + (angle - touchStartAngle);
+                
+                if (mode === 'image') updateImageTransform(viewName);
+                draw();
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+             endDrag(viewName);
+             // Reset loupe if 3-point active
+             if(threePointState.active) {
+                 threePointState.mouseX = -100;
+                 threePointState.mouseY = -100;
+                 draw();
+             }
+        });
+    }
+    
+    function getTouchDist(touches) {
+        return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+    }
+    function getTouchAngle(touches) {
+        return Math.atan2(touches[1].clientY - touches[0].clientY, touches[1].clientX - touches[0].clientX);
+    }
+
+    function startDrag(e, viewName) {
+        const mode = controlModes[viewName];
+        const s = (mode === 'diagram') ? viewState[viewName] : imageState[viewName];
+        s.isDragging = true;
+        s.lastX = e.clientX;
+        s.lastY = e.clientY;
+    }
+
+    function drag(e, viewName) {
+        const mode = controlModes[viewName];
+        const s = (mode === 'diagram') ? viewState[viewName] : imageState[viewName];
+        if (!s.isDragging) return;
+        
+        const dx = e.clientX - s.lastX;
+        const dy = e.clientY - s.lastY;
+        
+        // For image, we move it directly; for diagram we move origin
+        s.x += dx;
+        s.y += dy;
+        s.lastX = e.clientX;
+        s.lastY = e.clientY;
+        
+        if (mode === 'image') updateImageTransform(viewName);
+        draw();
+    }
+
+    function endDrag(viewName) {
+        const mode = controlModes[viewName];
+        const s = (mode === 'diagram') ? viewState[viewName] : imageState[viewName];
+        s.isDragging = false;
+    }
+
+    function updateImageTransform(viewName) {
+        const ist = imageState[viewName];
+        const transform = `translate(${ist.x}px, ${ist.y}px) rotate(${ist.rotate}rad) scale(${ist.scale})`;
+        const ov = overlays[viewName];
+        if(ov.elVid) ov.elVid.style.transform = transform;
+        if(ov.elImg) ov.elImg.style.transform = transform;
+    }
+
+    // Event Listeners
+    Object.keys(inputs).forEach(key => {
+        inputs[key].addEventListener('input', (e) => {
+            config[key] = parseFloat(e.target.value);
+            // Update text display
+            const display = document.getElementById(`val-${key.replace('Pct', '').replace('Thick', '').replace('Angle', '')}`);
+            if(display) display.textContent = config[key];
+            
+            draw();
+        });
+    });
+
+    // Attach Interactions
+    attachInteraction(cvsProfile, 'profile');
+    attachInteraction(cvsPlan, 'plan');
+
+    window.addEventListener('resize', resize);
+
+    // Init
+    resize();
+
+</script>
+
+</body>
+</html>
