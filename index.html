@@ -256,6 +256,11 @@
     <p style="font-size: 0.8rem; opacity: 0.7;">Adjust proportions to see the geometry change.</p>
 
     <!-- Controls -->
+    <div class="control-group" id="cameraZoomContainer" style="display:none;">
+        <label>Optical Zoom <span id="val-cameraZoom">1.0x</span></label>
+        <input type="range" id="cameraZoom" min="1" max="1" step="0.1" value="1">
+    </div>
+
     <div class="control-group">
         <label>Table Width (%) <span id="val-table">57</span></label>
         <input type="range" id="tablePct" min="40" max="70" value="57" step="1">
@@ -312,6 +317,7 @@
         <div class="view-label">PROFILE</div>
         <div class="view-toolbar">
             <button onclick="toggleCamera('profile')" id="btn-cam-profile" title="Toggle Camera">📹</button>
+            <button onclick="switchCamera()" class="btn-switch-cam" title="Switch Camera" style="display:none;">🔄</button>
             <button onclick="toggleControlMode('profile')" id="btn-mode-profile" title="Control Mode: Diagram">Move: ◇</button>
             <label class="toolbar-btn" title="Upload Image">
                 📂<input type="file" onchange="handleImageUpload(event, 'profile')" accept="image/*" style="display:none;">
@@ -334,6 +340,7 @@
         <div class="view-label">PLAN</div>
         <div class="view-toolbar">
             <button onclick="toggleCamera('plan')" id="btn-cam-plan" title="Toggle Camera">📹</button>
+            <button onclick="switchCamera()" class="btn-switch-cam" title="Switch Camera" style="display:none;">🔄</button>
             <button onclick="toggleControlMode('plan')" id="btn-mode-plan" title="Control Mode: Diagram">Move: ◇</button>
             <label class="toolbar-btn" title="Upload Image">
                 📂<input type="file" onchange="handleImageUpload(event, 'plan')" accept="image/*" style="display:none;">
@@ -382,6 +389,8 @@
 
     // Overlay State
     let sharedStream = null;
+    let videoDevices = [];
+    let currentDeviceIndex = 0;
     const overlays = {
         profile: { type: null, elVid: document.getElementById('vid-profile'), elImg: document.getElementById('img-profile'), btnCam: document.getElementById('btn-cam-profile') },
         plan:    { type: null, elVid: document.getElementById('vid-plan'),    elImg: document.getElementById('img-plan'),    btnCam: document.getElementById('btn-cam-plan') }
@@ -951,6 +960,7 @@
             if (overlays.profile.type !== 'camera' && overlays.plan.type !== 'camera' && sharedStream) {
                 sharedStream.getTracks().forEach(t => t.stop());
                 sharedStream = null;
+                updateZoomControls();
             }
         } else {
             // START Camera
@@ -962,23 +972,47 @@
                 // Reuse existing stream if available
                 if (sharedStream && sharedStream.active) {
                     stream = sharedStream;
-                } else if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-                } else if (navigator.webkitGetUserMedia) {
-                    stream = await new Promise((resolve, reject) => {
-                        navigator.webkitGetUserMedia({ video: true }, resolve, reject);
-                    });
-                }
-                // 3. Try Mozilla Legacy
-                else if (navigator.mozGetUserMedia) {
-                    stream = await new Promise((resolve, reject) => {
-                        navigator.mozGetUserMedia({ video: true }, resolve, reject);
-                    });
                 } else {
-                    if (!window.isSecureContext) {
-                        throw new Error("INSECURE_CONTEXT");
+                    if (videoDevices.length === 0 && navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+                        try {
+                            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                            let allDevs = await navigator.mediaDevices.enumerateDevices();
+                            videoDevices = allDevs.filter(d => d.kind === 'videoinput');
+                            let rear = videoDevices.filter(d => {
+                                const lbl = d.label.toLowerCase();
+                                return lbl.includes('back') || lbl.includes('rear') || lbl.includes('environment');
+                            });
+                            if (rear.length > 0) videoDevices = rear;
+                            
+                            updateCameraUI();
+                            const track = stream.getVideoTracks()[0];
+                            currentDeviceIndex = videoDevices.findIndex(d => d.deviceId === track.getSettings().deviceId);
+                            if (currentDeviceIndex < 0) currentDeviceIndex = 0;
+                        } catch(e) {
+                            console.warn("Initial camera enumeration failed", e);
+                        }
                     }
-                    throw new Error("API_MISSING");
+                    
+                    if (!stream) {
+                        if (videoDevices.length > 0) {
+                            stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: videoDevices[currentDeviceIndex].deviceId } } });
+                        } else if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                        } else if (navigator.webkitGetUserMedia) {
+                            stream = await new Promise((resolve, reject) => {
+                                navigator.webkitGetUserMedia({ video: true }, resolve, reject);
+                            });
+                        } else if (navigator.mozGetUserMedia) {
+                            stream = await new Promise((resolve, reject) => {
+                                navigator.mozGetUserMedia({ video: true }, resolve, reject);
+                            });
+                        } else {
+                            if (!window.isSecureContext) {
+                                throw new Error("INSECURE_CONTEXT");
+                            }
+                            throw new Error("API_MISSING");
+                        }
+                    }
                 }
 
                 sharedStream = stream;
@@ -986,6 +1020,8 @@
                 ov.elVid.style.display = 'block';
                 ov.type = 'camera';
                 ov.btnCam.style.background = '#ef4444'; // Red for stop
+                
+                setTimeout(updateZoomControls, 500);
             } catch (err) {
                 console.error("Error accessing camera:", err);
                 
@@ -996,6 +1032,66 @@
                 }
                 sharedStream = null;
             }
+        }
+    }
+
+    async function switchCamera() {
+        if (videoDevices.length <= 1) return;
+        currentDeviceIndex = (currentDeviceIndex + 1) % videoDevices.length;
+        
+        if (sharedStream) {
+            sharedStream.getTracks().forEach(t => t.stop());
+            sharedStream = null;
+        }
+
+        const activeViews = Object.keys(overlays).filter(v => overlays[v].type === 'camera');
+        if (activeViews.length === 0) return;
+        
+        try {
+            sharedStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: videoDevices[currentDeviceIndex].deviceId } } });
+            activeViews.forEach(v => {
+                overlays[v].elVid.srcObject = sharedStream;
+            });
+            setTimeout(updateZoomControls, 500);
+        } catch(e) {
+            console.error("Error switching camera", e);
+            alert("Could not switch camera: " + e.message);
+        }
+    }
+
+    function updateCameraUI() {
+        document.querySelectorAll('.btn-switch-cam').forEach(btn => {
+            btn.style.display = videoDevices.length > 1 ? 'inline-block' : 'none';
+        });
+    }
+
+    function updateZoomControls() {
+        const container = document.getElementById('cameraZoomContainer');
+        if (!sharedStream || sharedStream.getVideoTracks().length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+        const track = sharedStream.getVideoTracks()[0];
+        const capabilities = typeof track.getCapabilities === 'function' ? track.getCapabilities() : {};
+        
+        if (capabilities.zoom) {
+            const slider = document.getElementById('cameraZoom');
+            slider.min = capabilities.zoom.min || 1;
+            slider.max = capabilities.zoom.max || 10;
+            slider.step = capabilities.zoom.step || 0.1;
+            slider.value = track.getSettings().zoom || capabilities.zoom.min || 1;
+            
+            document.getElementById('val-cameraZoom').textContent = parseFloat(slider.value).toFixed(1) + 'x';
+            container.style.display = 'flex';
+            
+            slider.oninput = (e) => {
+                document.getElementById('val-cameraZoom').textContent = parseFloat(e.target.value).toFixed(1) + 'x';
+                track.applyConstraints({
+                    advanced: [{zoom: parseFloat(e.target.value)}]
+                }).catch(err => console.error("Zoom apply error", err));
+            };
+        } else {
+            container.style.display = 'none';
         }
     }
 
@@ -1521,6 +1617,7 @@
             if (overlays[otherView].type !== 'camera' && sharedStream) {
                 sharedStream.getTracks().forEach(t => t.stop());
                 sharedStream = null;
+                updateZoomControls();
             }
             
             // 3. Auto-Align immediately after freeze
