@@ -28,11 +28,11 @@
             width: 300px;
             background: var(--panel-bg);
             backdrop-filter: blur(10px);
-            padding: 20px;
+            padding: 5px;
             border-right: 1px solid rgba(255, 255, 255, 0.1);
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 0px;
             overflow-y: auto;
             z-index: 10;
         }
@@ -157,7 +157,7 @@
 
         .view-label {
             position: absolute;
-            top: 10px; left: 10px;
+            top: 45px; left: 10px;
             background: rgba(0,0,0,0.5);
             padding: 4px 8px;
             border-radius: 4px;
@@ -226,8 +226,8 @@
                 overflow: visible;
             }
             main {
-                width: 100%;
-                height: 60vh;
+                width: 95%;
+                height: 160vh;
                 order: 1;
                 flex-direction: column;
             }
@@ -253,8 +253,6 @@
 
 <aside>
     <h2>Diamond Params</h2>
-    <p style="font-size: 0.8rem; opacity: 0.7;">Adjust proportions to see the geometry change.</p>
-
     <!-- Controls -->
     <div class="control-group" id="cameraZoomContainer" style="display:none;">
         <label>Optical Zoom <span id="val-cameraZoom">1.0x</span></label>
@@ -314,7 +312,7 @@
 <main>
     <!-- Profile Container -->
     <div class="view-container" id="container-profile">
-        <div class="view-label">PROFILE</div>
+        <div class="view-label">PROFILE VIEW</div>
         <div class="view-toolbar">
             <button onclick="toggleCamera('profile')" id="btn-cam-profile" title="Toggle Camera">📹</button>
             <button onclick="switchCamera()" class="btn-switch-cam" title="Switch Camera" style="display:none;">🔄</button>
@@ -337,7 +335,7 @@
 
     <!-- Plan Container -->
     <div class="view-container" id="container-plan">
-        <div class="view-label">PLAN</div>
+        <div class="view-label">CROWN VIEW</div>
         <div class="view-toolbar">
             <button onclick="toggleCamera('plan')" id="btn-cam-plan" title="Toggle Camera">📹</button>
             <button onclick="switchCamera()" class="btn-switch-cam" title="Switch Camera" style="display:none;">🔄</button>
