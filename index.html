@@ -190,6 +190,37 @@
             justify-content: center;
             margin: 0;
         }
+
+        /* Shutter Button */
+        .shutter-btn {
+            position: absolute;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 65px;
+            height: 65px;
+            background: white;
+            border-radius: 50%;
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            z-index: 40;
+            cursor: pointer;
+            transition: transform 0.1s, background 0.2s;
+        }
+        .shutter-btn:active {
+            transform: translateX(-50%) scale(0.9);
+            background: #e2e8f0;
+        }
+        .shutter-btn.active-cam {
+            border-color: #38bdf8;
+        }
+
+        .view-toolbar label.toolbar-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+        }
         .view-toolbar button:hover, .view-toolbar label.toolbar-btn:hover {
             background: rgba(56, 189, 248, 0.2);
         }
@@ -309,9 +340,8 @@
     <div class="view-container" id="container-profile">
         <div class="view-label">PROFILE VIEW</div>
         <div class="view-toolbar">
-            <button onclick="toggleCamera('profile')" id="btn-cam-profile" title="Toggle Camera">📹</button>
             <button onclick="switchCamera()" class="btn-switch-cam" title="Switch Camera" style="display:none;">🔄</button>
-            <button onclick="toggleControlMode('profile')" id="btn-mode-profile" title="Control Mode: Diagram">Move: ◇</button>
+            <button onclick="toggleControlMode('profile')" id="btn-mode-profile" title="Control Mode: Diagram">🔎</button>
             <label class="toolbar-btn" title="Upload Image">
                 📂<input type="file" onchange="handleImageUpload(event, 'profile')" accept="image/*" style="display:none;">
             </label>
@@ -326,15 +356,15 @@
         <canvas id="canvasProfile"></canvas>
         <video id="vid-profile" autoplay playsinline muted></video>
         <img id="img-profile" class="overlay-img" />
+        <div class="shutter-btn" id="shutter-profile" onclick="handleShutter('profile')" title="Start/Capture"></div>
     </div>
 
     <!-- Plan Container -->
     <div class="view-container" id="container-plan">
         <div class="view-label">CROWN VIEW</div>
         <div class="view-toolbar">
-            <button onclick="toggleCamera('plan')" id="btn-cam-plan" title="Toggle Camera">📹</button>
             <button onclick="switchCamera()" class="btn-switch-cam" title="Switch Camera" style="display:none;">🔄</button>
-            <button onclick="toggleControlMode('plan')" id="btn-mode-plan" title="Control Mode: Diagram">Move: ◇</button>
+            <button onclick="toggleControlMode('plan')" id="btn-mode-plan" title="Control Mode: Diagram">🔎</button>
             <label class="toolbar-btn" title="Upload Image">
                 📂<input type="file" onchange="handleImageUpload(event, 'plan')" accept="image/*" style="display:none;">
             </label>
@@ -349,6 +379,7 @@
         <canvas id="canvasPlan"></canvas>
         <video id="vid-plan" autoplay playsinline muted></video>
         <img id="img-plan" class="overlay-img" />
+        <div class="shutter-btn" id="shutter-plan" onclick="handleShutter('plan')" title="Start/Capture"></div>
         <div class="legend">Parametric Render</div>
     </div>
 </main>
@@ -408,6 +439,7 @@
         profile: { active: false },
         plan:    { active: false }
     };
+    let initialOpticalZoom = 1;
 
     // Helper: Resize canvas to fit window with high DPI support
     function resize() {
@@ -945,7 +977,7 @@
             ov.elVid.srcObject = null;
             ov.elVid.style.display = 'none';
             ov.type = null;
-            ov.btnCam.style.background = ''; // Remove active style
+            document.getElementById(`shutter-${viewName}`).classList.remove('active-cam');
 
             // If no other view is using camera, stop stream
             if (overlays.profile.type !== 'camera' && overlays.plan.type !== 'camera' && sharedStream) {
@@ -1010,7 +1042,7 @@
                 ov.elVid.srcObject = sharedStream;
                 ov.elVid.style.display = 'block';
                 ov.type = 'camera';
-                ov.btnCam.style.background = '#ef4444'; // Red for stop
+                document.getElementById(`shutter-${viewName}`).classList.add('active-cam');
                 
                 setTimeout(updateZoomControls, 500);
             } catch (err) {
@@ -1054,6 +1086,17 @@
         document.querySelectorAll('.btn-switch-cam').forEach(btn => {
             btn.style.display = videoDevices.length > 1 ? 'inline-block' : 'none';
         });
+    }
+
+    function handleShutter(viewName) {
+        const ov = overlays[viewName];
+        if (ov.type !== 'camera') {
+            // Activate camera if it's off or showing an image
+            toggleCamera(viewName);
+        } else {
+            // Capture/Freeze if camera is already on
+            toggleFreeze(viewName);
+        }
     }
 
     function updateZoomControls() {
@@ -1601,7 +1644,7 @@
             ov.elVid.srcObject = null;
             ov.elVid.style.display = 'none';
             ov.type = 'image';
-            ov.btnCam.style.background = ''; // Camera inactive
+            document.getElementById(`shutter-${viewName}`).classList.remove('active-cam');
             
             // Stop shared stream if unused
             const otherView = viewName === 'profile' ? 'plan' : 'profile';
@@ -1698,12 +1741,6 @@
         let initialRotate = 0;
         
         canvas.addEventListener('touchstart', (e) => {
-            // Tap to freeze check
-            if (e.touches.length === 1 && overlays[viewName].type === 'camera' && !threePointState.active) {
-                toggleFreeze(viewName);
-                return;
-            }
-
             if (threePointState.active) return; // Let 3-point logic handle it
             e.preventDefault();
             
@@ -1717,6 +1754,11 @@
                 const s = (mode === 'diagram') ? viewState[viewName] : imageState[viewName];
                 initialScale = s.scale;
                 initialRotate = s.rotate;
+
+                if (overlays[viewName].type === 'camera' && sharedStream) {
+                    const track = sharedStream.getVideoTracks()[0];
+                    initialOpticalZoom = track.getSettings().zoom || 1;
+                }
             }
         }, { passive: false });
 
@@ -1737,11 +1779,35 @@
             if (e.touches.length === 1) {
                  drag({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY }, viewName);
             } else if (e.touches.length === 2) {
-                // Pinch Zoom
                 const dist = getTouchDist(e.touches);
                 const scaleFactor = dist / touchStartDist;
-                s.scale = Math.max(0.01, Math.min(initialScale * scaleFactor, 5));
-                
+
+                const ov = overlays[viewName];
+                if (ov.type === 'camera' && sharedStream) {
+                    // OPTICAL ZOOM
+                    const track = sharedStream.getVideoTracks()[0];
+                    const capabilities = typeof track.getCapabilities === 'function' ? track.getCapabilities() : {};
+                    
+                    if (capabilities.zoom) {
+                        let targetZoom = initialOpticalZoom * scaleFactor;
+                        targetZoom = Math.max(capabilities.zoom.min, Math.min(targetZoom, capabilities.zoom.max));
+                        
+                        track.applyConstraints({
+                            advanced: [{zoom: targetZoom}]
+                        }).catch(err => console.error("Optical zoom error", err));
+
+                        // Sync UI slider if visible
+                        const slider = document.getElementById('cameraZoom');
+                        if (slider) {
+                            slider.value = targetZoom;
+                            document.getElementById('val-cameraZoom').textContent = targetZoom.toFixed(1) + 'x';
+                        }
+                    }
+                } else {
+                    // DIAGRAM/IMAGE SCALE
+                    s.scale = Math.max(0.01, Math.min(initialScale * scaleFactor, 5));
+                }
+
                 // Rotate
                 const angle = getTouchAngle(e.touches);
                 s.rotate = initialRotate + (angle - touchStartAngle);
