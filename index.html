@@ -1230,12 +1230,12 @@
         const btn = document.getElementById(`btn-mode-${viewName}`);
         if (controlModes[viewName] === 'diagram') {
             controlModes[viewName] = 'image';
-            btn.textContent = 'Move: 🖼️';
+            btn.textContent = '🖼️';
             btn.title = 'Control Mode: Image';
             btn.style.background = 'rgba(56, 189, 248, 0.4)';
         } else {
             controlModes[viewName] = 'diagram';
-            btn.textContent = 'Move: ◇';
+            btn.textContent = '🔎';
             btn.title = 'Control Mode: Diagram';
             btn.style.background = '';
         }
