@@ -278,7 +278,7 @@
         <label>Girdle Thickness (%) <span id="val-girdle">3</span></label>
         <input type="range" id="girdleThick" min="0.2" max="12" value="3" step="0.1">
     </div>
-
+    
     <!-- Calculated Results -->
     <div class="results-panel">
         <div class="result-row">
@@ -367,7 +367,6 @@
         crownAngle: 34.5,
         pavAngle: 40.75,
         girdleThickPct: 3,
-        scale: 1.0,
         baseSize: 300 // The "100%" diameter in pixels
     };
 
@@ -376,8 +375,7 @@
         tablePct: document.getElementById('tablePct'),
         crownAngle: document.getElementById('crownAngle'),
         pavAngle: document.getElementById('pavAngle'),
-        girdleThickPct: document.getElementById('girdleThick'),
-        scale: document.getElementById('scale')
+        girdleThickPct: document.getElementById('girdleThick')
     };
 
     // Overlay State
@@ -432,7 +430,7 @@
         // 1. Calculate Geometry shared by both views
         // Determine base size relative to the smaller canvas to ensure consistent scale if containers differ
         const minDim = Math.min(cvsProfile.width, cvsProfile.height, cvsPlan.width, cvsPlan.height);
-        const diameter = (minDim * 0.8) * config.scale; // Global scale
+        const diameter = (minDim * 0.8); // Global scale
         const radius = diameter / 2;
         
         const tableRadius = radius * (config.tablePct / 100);
@@ -1430,7 +1428,7 @@
                 objectSize /= scale;
 
                 const minDim = Math.min(cvsProfile.width, cvsProfile.height, cvsPlan.width, cvsPlan.height);
-                const baseDiameter = (minDim * 0.8) * config.scale; // The size the chart normally draws at scale 1.0 (relative to slider)
+                const baseDiameter = (minDim * 0.8); // The size the chart normally draws at scale 1.0
                 
                 const targetX = boxCX - (width / 2);
                 const targetY = boxCY - (height / 2);
@@ -1566,7 +1564,7 @@
         viewState[viewName].y = Uy - (cvs.height / 2);
         
         const minDim = Math.min(cvsProfile.width, cvsProfile.height, cvsPlan.width, cvsPlan.height);
-        const baseDiameter = (minDim * 0.8) * config.scale;
+        const baseDiameter = (minDim * 0.8);
         viewState[viewName].scale = (r * 2) / baseDiameter;
 
         // Reset Tool
