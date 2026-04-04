@@ -28,11 +28,11 @@
             width: 300px;
             background: var(--panel-bg);
             backdrop-filter: blur(10px);
-            padding: 20px;
+            padding: 5px;
             border-right: 1px solid rgba(255, 255, 255, 0.1);
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 0px;
             overflow-y: auto;
             z-index: 10;
         }
@@ -157,7 +157,7 @@
 
         .view-label {
             position: absolute;
-            top: 10px; left: 10px;
+            top: 45px; left: 10px;
             background: rgba(0,0,0,0.5);
             padding: 4px 8px;
             border-radius: 4px;
@@ -184,6 +184,37 @@
             cursor: pointer;
             border-radius: 4px; /* Ensure consistency */
         }
+        .view-toolbar label.toolbar-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+        }
+
+        /* Shutter Button */
+        .shutter-btn {
+            position: absolute;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 65px;
+            height: 65px;
+            background: white;
+            border-radius: 50%;
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            z-index: 40;
+            cursor: pointer;
+            transition: transform 0.1s, background 0.2s;
+        }
+        .shutter-btn:active {
+            transform: translateX(-50%) scale(0.9);
+            background: #e2e8f0;
+        }
+        .shutter-btn.active-cam {
+            border-color: #38bdf8;
+        }
+
         .view-toolbar label.toolbar-btn {
             display: inline-flex;
             align-items: center;
@@ -226,8 +257,8 @@
                 overflow: visible;
             }
             main {
-                width: 100%;
-                height: 60vh;
+                width: 95%;
+                height: 160vh;
                 order: 1;
                 flex-direction: column;
             }
@@ -253,8 +284,6 @@
 
 <aside>
     <h2>Diamond Params</h2>
-    <p style="font-size: 0.8rem; opacity: 0.7;">Adjust proportions to see the geometry change.</p>
-
     <!-- Controls -->
     <div class="control-group" id="cameraZoomContainer" style="display:none;">
         <label>Optical Zoom <span id="val-cameraZoom">1.0x</span></label>
@@ -263,29 +292,31 @@
 
     <div class="control-group">
         <label>Table Width (%) <span id="val-table">57</span></label>
-        <input type="range" id="tablePct" min="40" max="70" value="57" step="1">
+        <input type="range" id="tablePct" min="40" max="70" value="57" step="0.1">
     </div>
 
     <div class="control-group">
         <label>Crown Angle (°) <span id="val-crown">34.5</span></label>
-        <input type="range" id="crownAngle" min="20" max="45" value="34.5" step="0.5">
+        <input type="range" id="crownAngle" min="20" max="45" value="34.5" step="0.1">
     </div>
 
     <div class="control-group">
         <label>Pavilion Angle (°) <span id="val-pav">40.75</span></label>
-        <input type="range" id="pavAngle" min="35" max="50" value="40.75" step="0.25">
+        <input type="range" id="pavAngle" min="35" max="50" value="40.75" step="0.1">
     </div>
 
     <div class="control-group">
         <label>Girdle Thickness (%) <span id="val-girdle">3</span></label>
-        <input type="range" id="girdleThick" min="0.5" max="10" value="3" step="0.5">
-    </div>
-    
-    <div class="control-group">
-        <label>Scale (Zoom) <span id="val-scale">1.0</span></label>
-        <input type="range" id="scale" min="0.1" max="3.0" value="1.0" step="0.1">
+        <input type="range" id="girdleThick" min="0.2" max="12" value="3" step="0.1">
     </div>
 
+    
+    
+    <div class="control-group">
+        <label>LGF Ratio <span id="val-lgf">0.78</span></label>
+        <input type="range" id="lgfRatio" min="0.65" max="0.90" value="0.78" step="0.01">
+    </div>
+    
     <!-- Calculated Results -->
     <div class="results-panel">
         <div class="result-row">
@@ -314,11 +345,10 @@
 <main>
     <!-- Profile Container -->
     <div class="view-container" id="container-profile">
-        <div class="view-label">PROFILE</div>
+        <div class="view-label">PROFILE VIEW</div>
         <div class="view-toolbar">
-            <button onclick="toggleCamera('profile')" id="btn-cam-profile" title="Toggle Camera">📹</button>
             <button onclick="switchCamera()" class="btn-switch-cam" title="Switch Camera" style="display:none;">🔄</button>
-            <button onclick="toggleControlMode('profile')" id="btn-mode-profile" title="Control Mode: Diagram">Move: ◇</button>
+            <button onclick="toggleControlMode('profile')" id="btn-mode-profile" title="Control Mode: Diagram">🔎</button>
             <label class="toolbar-btn" title="Upload Image">
                 📂<input type="file" onchange="handleImageUpload(event, 'profile')" accept="image/*" style="display:none;">
             </label>
@@ -333,15 +363,15 @@
         <canvas id="canvasProfile"></canvas>
         <video id="vid-profile" autoplay playsinline muted></video>
         <img id="img-profile" class="overlay-img" />
+        <div class="shutter-btn" id="shutter-profile" onclick="handleShutter('profile')" title="Start/Capture"></div>
     </div>
 
     <!-- Plan Container -->
     <div class="view-container" id="container-plan">
-        <div class="view-label">PLAN</div>
+        <div class="view-label">CROWN VIEW</div>
         <div class="view-toolbar">
-            <button onclick="toggleCamera('plan')" id="btn-cam-plan" title="Toggle Camera">📹</button>
             <button onclick="switchCamera()" class="btn-switch-cam" title="Switch Camera" style="display:none;">🔄</button>
-            <button onclick="toggleControlMode('plan')" id="btn-mode-plan" title="Control Mode: Diagram">Move: ◇</button>
+            <button onclick="toggleControlMode('plan')" id="btn-mode-plan" title="Control Mode: Diagram">🔎</button>
             <label class="toolbar-btn" title="Upload Image">
                 📂<input type="file" onchange="handleImageUpload(event, 'plan')" accept="image/*" style="display:none;">
             </label>
@@ -356,6 +386,7 @@
         <canvas id="canvasPlan"></canvas>
         <video id="vid-plan" autoplay playsinline muted></video>
         <img id="img-plan" class="overlay-img" />
+        <div class="shutter-btn" id="shutter-plan" onclick="handleShutter('plan')" title="Start/Capture"></div>
         <div class="legend">Parametric Render</div>
     </div>
 </main>
@@ -374,7 +405,7 @@
         crownAngle: 34.5,
         pavAngle: 40.75,
         girdleThickPct: 3,
-        scale: 1.0,
+        lgfRatio: 0.78,
         baseSize: 300 // The "100%" diameter in pixels
     };
 
@@ -384,7 +415,7 @@
         crownAngle: document.getElementById('crownAngle'),
         pavAngle: document.getElementById('pavAngle'),
         girdleThickPct: document.getElementById('girdleThick'),
-        scale: document.getElementById('scale')
+        lgfRatio: document.getElementById('lgfRatio')
     };
 
     // Overlay State
@@ -417,6 +448,7 @@
         profile: { active: false },
         plan:    { active: false }
     };
+    let initialOpticalZoom = 1;
 
     // Helper: Resize canvas to fit window with high DPI support
     function resize() {
@@ -439,7 +471,7 @@
         // 1. Calculate Geometry shared by both views
         // Determine base size relative to the smaller canvas to ensure consistent scale if containers differ
         const minDim = Math.min(cvsProfile.width, cvsProfile.height, cvsPlan.width, cvsPlan.height);
-        const diameter = (minDim * 0.8) * config.scale; // Global scale
+        const diameter = (minDim * 0.8); // Global scale
         const radius = diameter / 2;
         
         const tableRadius = radius * (config.tablePct / 100);
@@ -649,8 +681,8 @@
         }
         
         // 4. Draw Pavilion Depth Reflection Control (Dashed Circle)
+        const rReflect = tableRadius * (reflectionPct / 100);
         if (reflectionPct > 0) {
-            const rReflect = tableRadius * (reflectionPct / 100);
             ctx.beginPath();
             ctx.arc(0, 0, rReflect, 0, Math.PI * 2);
             ctx.setLineDash([3, 3]);
@@ -659,138 +691,76 @@
             ctx.setLineDash([]);
         }
 
-        // 5. Draw Crown Angle Arrowhead Boundary (Dotted Blue Circle)
-        if (crownReflectionPct > 0) {
-            const rCrown = radius * (crownReflectionPct / 100);
+        // --- H&A OPTICAL PHYSICS ENGINE ---
+        const n = 2.417; // Diamond Refractive Index
+        const beta = rad(config.crownAngle);  // Crown (bezel) angle
+        const lgfRatio = config.lgfRatio;  // Lower Girdle Facet ratio (affects arrow "thinness")
+
+        // 1. Arrowhead "V" Half-Angle via Snell's Law & Crown Refraction
+        // The bezel facet is tilted by 'beta'. We calculate the apparent width of the 
+        // pavilion main reflection as it refracts through the tilted crown facet.
+        const internalHalfAngle = (1 - lgfRatio) * (Math.PI / 8); 
+        // Snell's law for a tilted surface: n*sin(theta_in) = sin(theta_out)
+        // The tilt (beta) compresses the apparent angle:
+        const headHalfAngle = Math.asin(Math.min(1.0, n * Math.sin(internalHalfAngle) * (Math.sin(beta)*1.5)));
+        
+        //
+
+        // 2. Performance/Clarity (TIR Failure)
+        // Arrows are only "Ideal" black extinction when pavilion angles allow proper TIR.
+        const pavDeviation = Math.abs(config.pavAngle - 40.75);
+        const arrowClarity = Math.max(0.5, 0.8 - (pavDeviation * 0.35));
+
+        for (let i = 0; i < 8; i++) {
+            const theta = (i * Math.PI / 4) + (Math.PI / 8);
+            ctx.save();
+            ctx.rotate(theta);
+
+            // Real-world arrow color (Deep obsidian extinction)
+            const opacity = 0.98 * arrowClarity;
+            ctx.fillStyle = `rgba(5, 8, 15, ${opacity})`;
+
+            // Clip to Girdle: Ensure nothing draws outside the radius
             ctx.beginPath();
-            ctx.arc(0, 0, rCrown, 0, Math.PI * 2);
-            ctx.setLineDash([2, 5]);
-            ctx.strokeStyle = '#38bdf8';
-            ctx.lineWidth = 1.0;
-            ctx.stroke();
-            ctx.setLineDash([]);
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            ctx.clip();
+
+            // --- DRAW SHAFT (Seen through Table) ---
+            const shaftBaseWidth = tableRadius * (1.1 - lgfRatio) * 0.21;
+            const shaftTipWidth = shaftBaseWidth * 4;
+
+            ctx.beginPath();
+            ctx.moveTo(rReflect+10, 0); // Tip at center
+            ctx.lineTo(rReflect, shaftTipWidth / 2); // Flare start
+            ctx.lineTo(tableRadius, shaftBaseWidth / 2); // Outer corner
+            ctx.lineTo(tableRadius, -shaftBaseWidth / 2); // Outer corner (opposite)
+            ctx.lineTo(rReflect, -shaftTipWidth / 2); // Flare start (opposite)
+            ctx.closePath();
+            ctx.fill();
+
+            // --- DRAW ARROWHEAD (Seen through Bezel Facets) ---
+            // Arrowhead length spans the bezel (Table edge to Girdle)
+            const headBase = tableRadius;
+            const headTip = radius + 8 + config.girdleThickPct*config.girdleThickPct/8; // Tip at girdle
+            const headLength = headTip - headBase;
+            const wingWidth = Math.tan(headHalfAngle) * headLength;
+
+            ctx.beginPath();
+            ctx.moveTo(headTip, 0); // Pointy Tip
+            ctx.lineTo(headBase + headLength * 0.15, wingWidth); // Wing shoulder
+            ctx.lineTo(headBase, shaftBaseWidth * 0.5); // Neck (meets shaft)
+            const chevronDepth = headLength * 0; // V-notch depth
+            ctx.lineTo(headBase + chevronDepth, 0); 
+            ctx.lineTo(headBase, -shaftBaseWidth * 0.5);
+            ctx.lineTo(headBase + headLength * 0.15, -wingWidth);
+            ctx.closePath();
             
-            // 6. Draw 8 Arrows (Hearts & Arrows Pattern - Advanced Optical Simulation)
-            if (reflectionPct > 0) {
-                const rReflect = tableRadius * (reflectionPct / 100);
-                
-                ctx.save();
-                
-                // Advanced optical mapping factors
-                const alpha = rad(config.pavAngle);
-                const K_factor = 1 / (4 * Math.sin(alpha) * Math.sin(alpha) - 1);
-                
-                // Physical junction of Lower Halves and Pavilion Mains (approx 75% down)
-                // When mapped to table view, the shaft reaches max visual width here
-                const rJunc_visual = (radius * 0.25) / K_factor; 
-                
-                for (let i = 0; i < 8; i++) {
-                    const theta = (i * Math.PI / 4) + (Math.PI / 8);
-                    ctx.save();
-                    ctx.rotate(theta);
-                    
-                    // --- DRAW SHAFT (The stem inside the table) ---
-                    // "starts wider and keeps getting narrower till the edge of table"
-                    // We calculate the exact optical mapping of the pavilion facet width inside the table!
-                    const rJunc_visual = (radius * 0.25) / K_factor; 
-                    const rEnd_visual = radius / K_factor; // Physical limit of pavilion main facet
-                    
-                    // True physical wedge width at junction (45 degree span / 8 fold symmetry)
-                    const shaftMaxW = rJunc_visual * Math.tan(Math.PI / 8) * 0.95; // robust & much wider
-                    
-                    // Optical function mapping radius to physical facet visual width
-                    function getShaftW(r) {
-                        if (r <= rJunc_visual) return shaftMaxW * (r / rJunc_visual);
-                        if (r >= rEnd_visual) return 0;
-                        return shaftMaxW * (rEnd_visual - r) / (rEnd_visual - rJunc_visual);
-                    }
-                    
-                    const w_Junc = getShaftW(rJunc_visual);
-                    const w_Reflect = getShaftW(rReflect);
-                    const w_Table = getShaftW(tableRadius);
-                    
-                    // Segment 1: Dark retro-reflection (Culet to Table Reflection Limit)
-                    ctx.fillStyle = 'rgba(56, 189, 248, 0.4)'; // Main base
-                    ctx.beginPath();
-                    ctx.moveTo(0, 0); 
-                    if (rReflect > rJunc_visual) {
-                        ctx.lineTo(rJunc_visual, w_Junc);
-                        ctx.lineTo(rReflect, w_Reflect);
-                        ctx.lineTo(rReflect, -w_Reflect);
-                        ctx.lineTo(rJunc_visual, -w_Junc);
-                    } else {
-                        ctx.lineTo(rReflect, w_Reflect);
-                        ctx.lineTo(rReflect, -w_Reflect);
-                    }
-                    ctx.fill();
-                    
-                    // Segment 1 Inner tube
-                    ctx.fillStyle = 'rgba(15, 23, 42, 0.6)';
-                    ctx.beginPath();
-                    ctx.moveTo(0, 0);
-                    if (rReflect > rJunc_visual) {
-                        ctx.lineTo(rJunc_visual, w_Junc * 0.4);
-                        ctx.lineTo(rReflect, w_Reflect * 0.4);
-                        ctx.lineTo(rReflect, -w_Reflect * 0.4);
-                        ctx.lineTo(rJunc_visual, -w_Junc * 0.4);
-                    } else {
-                        ctx.lineTo(rReflect, w_Reflect * 0.4);
-                        ctx.lineTo(rReflect, -w_Reflect * 0.4);
-                    }
-                    ctx.fill();
-                    
-                    // Segment 2: Bright Extension (Table Reflection Limit to Table Edge)
-                    // "very thick and they go thinner until they touch the inner edge of the table"
-                    if (tableRadius > rReflect) {
-                        ctx.fillStyle = 'rgba(56, 189, 248, 0.12)'; // Faint continuation
-                        ctx.beginPath();
-                        ctx.moveTo(rReflect, w_Reflect);
-                        ctx.lineTo(tableRadius, w_Table);
-                        ctx.lineTo(tableRadius, -w_Table);
-                        ctx.lineTo(rReflect, -w_Reflect);
-                        ctx.fill();
-                        
-                        ctx.fillStyle = 'rgba(15, 23, 42, 0.2)'; // Faint inner tube
-                        ctx.beginPath();
-                        ctx.moveTo(rReflect, w_Reflect * 0.4);
-                        ctx.lineTo(tableRadius, w_Table * 0.4);
-                        ctx.lineTo(tableRadius, -w_Table * 0.4);
-                        ctx.lineTo(rReflect, -w_Reflect * 0.4);
-                        ctx.fill();
-                    }
-                    
-                    // --- DRAW ARROWHEAD (Through the bezel facet) ---
-                    // "push the arrows back to the girdle and somewhere they refract (maybe around 70%)... 
-                    // so when they refract they go back to narrow tword the table edge."
-                    // This physically matches the lower-half junction!
-                    if (crownReflectionPct > 0) {
-                        // Modulate thickness actively by crown angle refraction properties
-                        const baseBeta = Math.tan(34.5 * Math.PI / 180);
-                        const currentBeta = Math.tan(rad(config.crownAngle));
-                        const widthMod = currentBeta / baseBeta;
-                        
-                        const headMaxW = (radius * 0.08) * widthMod; // Widest at ~75%
-                        const headBaseW = headMaxW * 0.35;           // Narrows toward table edge
-                        
-                        const rArrowTip = radius; // Touching the girdle
-                        const rWidest = radius * 0.72; // Widest optical point
-                        const indentX = tableRadius + (rArrowTip - tableRadius) * 0.15; 
-                        
-                        ctx.fillStyle = 'rgba(56, 189, 248, 0.6)'; 
-                        ctx.beginPath();
-                        ctx.moveTo(rArrowTip, 0);          // Tip boundary at girdle
-                        ctx.lineTo(rWidest, headMaxW);     // Widest point at lower-half junction
-                        ctx.lineTo(tableRadius, headBaseW);// Narrows down to table edge
-                        ctx.lineTo(indentX, 0);            // Chevron indent base
-                        ctx.lineTo(tableRadius, -headBaseW);
-                        ctx.lineTo(rWidest, -headMaxW);
-                        ctx.fill();
-                    }
-                    
-                    ctx.restore();
-                }
-                ctx.restore();
-            }
+
+            // Add refraction edge
+            ctx.strokeStyle = `rgba(255, 0, 0, ${0.95 * arrowClarity})`;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.restore();
         }
 
         // Draw simple crosshair for center reference
@@ -954,7 +924,7 @@
             ov.elVid.srcObject = null;
             ov.elVid.style.display = 'none';
             ov.type = null;
-            ov.btnCam.style.background = ''; // Remove active style
+            document.getElementById(`shutter-${viewName}`).classList.remove('active-cam');
 
             // If no other view is using camera, stop stream
             if (overlays.profile.type !== 'camera' && overlays.plan.type !== 'camera' && sharedStream) {
@@ -1019,7 +989,7 @@
                 ov.elVid.srcObject = sharedStream;
                 ov.elVid.style.display = 'block';
                 ov.type = 'camera';
-                ov.btnCam.style.background = '#ef4444'; // Red for stop
+                document.getElementById(`shutter-${viewName}`).classList.add('active-cam');
                 
                 setTimeout(updateZoomControls, 500);
             } catch (err) {
@@ -1063,6 +1033,17 @@
         document.querySelectorAll('.btn-switch-cam').forEach(btn => {
             btn.style.display = videoDevices.length > 1 ? 'inline-block' : 'none';
         });
+    }
+
+    function handleShutter(viewName) {
+        const ov = overlays[viewName];
+        if (ov.type !== 'camera') {
+            // Activate camera if it's off or showing an image
+            toggleCamera(viewName);
+        } else {
+            // Capture/Freeze if camera is already on
+            toggleFreeze(viewName);
+        }
     }
 
     function updateZoomControls() {
@@ -1196,12 +1177,12 @@
         const btn = document.getElementById(`btn-mode-${viewName}`);
         if (controlModes[viewName] === 'diagram') {
             controlModes[viewName] = 'image';
-            btn.textContent = 'Move: 🖼️';
+            btn.textContent = '🖼️';
             btn.title = 'Control Mode: Image';
             btn.style.background = 'rgba(56, 189, 248, 0.4)';
         } else {
             controlModes[viewName] = 'diagram';
-            btn.textContent = 'Move: ◇';
+            btn.textContent = '🔎';
             btn.title = 'Control Mode: Diagram';
             btn.style.background = '';
         }
@@ -1437,7 +1418,7 @@
                 objectSize /= scale;
 
                 const minDim = Math.min(cvsProfile.width, cvsProfile.height, cvsPlan.width, cvsPlan.height);
-                const baseDiameter = (minDim * 0.8) * config.scale; // The size the chart normally draws at scale 1.0 (relative to slider)
+                const baseDiameter = (minDim * 0.8); // The size the chart normally draws at scale 1.0
                 
                 const targetX = boxCX - (width / 2);
                 const targetY = boxCY - (height / 2);
@@ -1573,7 +1554,7 @@
         viewState[viewName].y = Uy - (cvs.height / 2);
         
         const minDim = Math.min(cvsProfile.width, cvsProfile.height, cvsPlan.width, cvsPlan.height);
-        const baseDiameter = (minDim * 0.8) * config.scale;
+        const baseDiameter = (minDim * 0.8);
         viewState[viewName].scale = (r * 2) / baseDiameter;
 
         // Reset Tool
@@ -1610,7 +1591,7 @@
             ov.elVid.srcObject = null;
             ov.elVid.style.display = 'none';
             ov.type = 'image';
-            ov.btnCam.style.background = ''; // Camera inactive
+            document.getElementById(`shutter-${viewName}`).classList.remove('active-cam');
             
             // Stop shared stream if unused
             const otherView = viewName === 'profile' ? 'plan' : 'profile';
@@ -1707,12 +1688,6 @@
         let initialRotate = 0;
         
         canvas.addEventListener('touchstart', (e) => {
-            // Tap to freeze check
-            if (e.touches.length === 1 && overlays[viewName].type === 'camera' && !threePointState.active) {
-                toggleFreeze(viewName);
-                return;
-            }
-
             if (threePointState.active) return; // Let 3-point logic handle it
             e.preventDefault();
             
@@ -1726,6 +1701,11 @@
                 const s = (mode === 'diagram') ? viewState[viewName] : imageState[viewName];
                 initialScale = s.scale;
                 initialRotate = s.rotate;
+
+                if (overlays[viewName].type === 'camera' && sharedStream) {
+                    const track = sharedStream.getVideoTracks()[0];
+                    initialOpticalZoom = track.getSettings().zoom || 1;
+                }
             }
         }, { passive: false });
 
@@ -1746,11 +1726,35 @@
             if (e.touches.length === 1) {
                  drag({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY }, viewName);
             } else if (e.touches.length === 2) {
-                // Pinch Zoom
                 const dist = getTouchDist(e.touches);
                 const scaleFactor = dist / touchStartDist;
-                s.scale = Math.max(0.01, Math.min(initialScale * scaleFactor, 5));
-                
+
+                const ov = overlays[viewName];
+                if (ov.type === 'camera' && sharedStream) {
+                    // OPTICAL ZOOM
+                    const track = sharedStream.getVideoTracks()[0];
+                    const capabilities = typeof track.getCapabilities === 'function' ? track.getCapabilities() : {};
+                    
+                    if (capabilities.zoom) {
+                        let targetZoom = initialOpticalZoom * scaleFactor;
+                        targetZoom = Math.max(capabilities.zoom.min, Math.min(targetZoom, capabilities.zoom.max));
+                        
+                        track.applyConstraints({
+                            advanced: [{zoom: targetZoom}]
+                        }).catch(err => console.error("Optical zoom error", err));
+
+                        // Sync UI slider if visible
+                        const slider = document.getElementById('cameraZoom');
+                        if (slider) {
+                            slider.value = targetZoom;
+                            document.getElementById('val-cameraZoom').textContent = targetZoom.toFixed(1) + 'x';
+                        }
+                    }
+                } else {
+                    // DIAGRAM/IMAGE SCALE
+                    s.scale = Math.max(0.01, Math.min(initialScale * scaleFactor, 5));
+                }
+
                 // Rotate
                 const angle = getTouchAngle(e.touches);
                 s.rotate = initialRotate + (angle - touchStartAngle);
@@ -1823,7 +1827,7 @@
         inputs[key].addEventListener('input', (e) => {
             config[key] = parseFloat(e.target.value);
             // Update text display
-            const display = document.getElementById(`val-${key.replace('Pct', '').replace('Thick', '').replace('Angle', '')}`);
+            const display = document.getElementById(`val-${key.replace('Pct', '').replace('Thick', '').replace('Angle', '').replace('Ratio', '')}`);
             if(display) display.textContent = config[key];
             
             draw();
