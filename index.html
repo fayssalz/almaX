@@ -262,6 +262,9 @@
                 order: 1;
                 flex-direction: column;
             }
+        main.is-maximized {
+            height: 80vh; /* Keeps the view at its original size when maximized on mobile */
+        }
             .legend {
                 display: none; /* Hide legend on small screens */
             }
@@ -359,6 +362,7 @@
             <button onclick="cancelThreePoint('profile')" id="btn-3pt-cancel-profile" style="display:none; color:#ef4444;" title="Cancel 3-Point">✕</button>
             <button onclick="toggleLiveTracking('profile')" title="Loading AI...">⏳</button>
             <button onclick="resetAlignment('profile')" title="Reset Alignment">⟳</button>
+            <button id="btn-maximize-profile" onclick="toggleMaximize('profile')" title="Toggle Fullscreen View">🗖</button>
         </div>
         <canvas id="canvasProfile"></canvas>
         <video id="vid-profile" autoplay playsinline muted></video>
@@ -382,6 +386,7 @@
             <button onclick="cancelThreePoint('plan')" id="btn-3pt-cancel-plan" style="display:none; color:#ef4444;" title="Cancel 3-Point">✕</button>
             <button onclick="toggleLiveTracking('plan')" title="Loading AI...">⏳</button>
             <button onclick="resetAlignment('plan')" title="Reset Alignment">⟳</button>
+            <button id="btn-maximize-plan" onclick="toggleMaximize('plan')" title="Toggle Fullscreen View">🗖</button>
         </div>
         <canvas id="canvasPlan"></canvas>
         <video id="vid-plan" autoplay playsinline muted></video>
@@ -468,24 +473,11 @@
 
     // Main Draw Function
     function draw() {
-        // 1. Calculate Geometry shared by both views
-        // Determine base size relative to the smaller canvas to ensure consistent scale if containers differ
-        const minDim = Math.min(cvsProfile.width, cvsProfile.height, cvsPlan.width, cvsPlan.height);
-        const diameter = (minDim * 0.8); // Global scale
-        const radius = diameter / 2;
-        
-        const tableRadius = radius * (config.tablePct / 100);
-        const runCrown = radius - tableRadius;
-        const crownHeight = runCrown * Math.tan(rad(config.crownAngle));
-        
-        const runPavilion = radius; // Pavilion goes to center (approx for culet)
-        const pavilionDepth = runPavilion * Math.tan(rad(config.pavAngle));
-        
-        const girdleThickness = diameter * (config.girdleThickPct / 100);
-
-        // --- CALCULATE & UPDATE PERCENTAGES ---
-        const crownPct = (crownHeight / diameter) * 100;
-        const pavPct = (pavilionDepth / diameter) * 100;
+        // 1. CALCULATE & UPDATE PERCENTAGES (Scale-Independent)
+        // Using formulas independent of physical pixel size to prevent distortion when hiding containers
+        const tableRatio = config.tablePct / 100;
+        const crownPct = (1 - tableRatio) * 0.5 * Math.tan(rad(config.crownAngle)) * 100;
+        const pavPct = 0.5 * Math.tan(rad(config.pavAngle)) * 100;
         const totalDepthPct = crownPct + config.girdleThickPct + pavPct;
 
         // Calculate Table Reflection Circle using exact optical ray-tracing
@@ -538,16 +530,32 @@
         if(elResPav) elResPav.textContent = pavPct.toFixed(1) + '%';
         if(elResArr) elResArr.textContent = crownReflectionPct.toFixed(1) + '%';
         
-        // 2. Render Profile
-        renderProfile(ctxProfile, cvsProfile.width, cvsProfile.height, radius, tableRadius, crownHeight, pavilionDepth, girdleThickness, crownPct, pavPct, totalDepthPct, viewState.profile);
-        if (threePointState.active && threePointState.view === 'profile') {
-            renderThreePointUI(ctxProfile, cvsProfile.width, cvsProfile.height);
+        // 2. Render Profile (Calculates its own scale based on local canvas size)
+        if (document.getElementById('container-profile').style.display !== 'none') {
+            const minDimProfile = Math.min(cvsProfile.width, cvsProfile.height);
+            const diameter = minDimProfile * 0.8;
+            const radius = diameter / 2;
+            const tableRadius = radius * tableRatio;
+            const crownHeight = (radius - tableRadius) * Math.tan(rad(config.crownAngle));
+            const pavilionDepth = radius * Math.tan(rad(config.pavAngle));
+            const girdleThickness = diameter * (config.girdleThickPct / 100);
+
+            renderProfile(ctxProfile, cvsProfile.width, cvsProfile.height, radius, tableRadius, crownHeight, pavilionDepth, girdleThickness, crownPct, pavPct, totalDepthPct, viewState.profile);
+            if (threePointState.active && threePointState.view === 'profile') {
+                renderThreePointUI(ctxProfile, cvsProfile.width, cvsProfile.height);
+            }
         }
 
-        // 3. Render Plan
-        renderPlan(ctxPlan, cvsPlan.width, cvsPlan.height, radius, tableRadius, pavReflectionPct, crownReflectionPct, viewState.plan);
-        if (threePointState.active && threePointState.view === 'plan') {
-            renderThreePointUI(ctxPlan, cvsPlan.width, cvsPlan.height);
+        // 3. Render Plan (Calculates its own scale based on local canvas size)
+        if (document.getElementById('container-plan').style.display !== 'none') {
+            const minDimPlan = Math.min(cvsPlan.width, cvsPlan.height);
+            const radius = (minDimPlan * 0.8) / 2;
+            const tableRadius = radius * tableRatio;
+
+            renderPlan(ctxPlan, cvsPlan.width, cvsPlan.height, radius, tableRadius, pavReflectionPct, crownReflectionPct, viewState.plan);
+            if (threePointState.active && threePointState.view === 'plan') {
+                renderThreePointUI(ctxPlan, cvsPlan.width, cvsPlan.height);
+            }
         }
     }
 
@@ -1417,14 +1425,13 @@
                 boxCY /= scale;
                 objectSize /= scale;
 
-                const minDim = Math.min(cvsProfile.width, cvsProfile.height, cvsPlan.width, cvsPlan.height);
-                const baseDiameter = (minDim * 0.8); // The size the chart normally draws at scale 1.0
+                const minDim = Math.min(width, height);
+                const baseDiameter = minDim * 0.8; 
                 
                 const targetX = boxCX - (width / 2);
                 const targetY = boxCY - (height / 2);
                 const targetScale = objectSize / baseDiameter;
 
-                // We adjust the view scale multiplier
                 if (isLive) {
                     // Smoother interpolation (Lerp) for face-filter feel
                     const lerpSpeed = 0.25; 
@@ -1553,8 +1560,7 @@
         viewState[viewName].x = Ux - (cvs.width / 2);
         viewState[viewName].y = Uy - (cvs.height / 2);
         
-        const minDim = Math.min(cvsProfile.width, cvsProfile.height, cvsPlan.width, cvsPlan.height);
-        const baseDiameter = (minDim * 0.8);
+        const baseDiameter = (Math.min(cvs.width, cvs.height) * 0.8);
         viewState[viewName].scale = (r * 2) / baseDiameter;
 
         // Reset Tool
@@ -1610,6 +1616,30 @@
         }
     }
 
+        function toggleMaximize(viewName) {
+        const main = document.querySelector('main');
+        const container = document.getElementById(`container-${viewName}`);
+        const otherViewName = viewName === 'profile' ? 'plan' : 'profile';
+        const otherContainer = document.getElementById(`container-${otherViewName}`);
+        const maximizeBtn = document.getElementById(`btn-maximize-${viewName}`);
+
+        if (otherContainer.style.display === 'none') {
+            // Currently maximized (other is hidden), so revert to normal
+            otherContainer.style.display = ''; // Revert to default (flex item)
+            maximizeBtn.textContent = '🗖'; // Maximize icon
+            maximizeBtn.title = 'Toggle Fullscreen View';
+            main.classList.remove('is-maximized');
+        } else {
+            // Maximize this view (hide other)
+            otherContainer.style.display = 'none';
+            maximizeBtn.textContent = '🗗'; // Restore icon
+            maximizeBtn.title = 'Restore View';
+            main.classList.add('is-maximized');
+        }
+        // Redraw after layout finishes
+        requestAnimationFrame(resize);
+    }
+    
     // Helper for Object-Fit: Contain drawing on canvas (Matches CSS)
     function drawImageProp(ctx, img, x, y, w, h, offsetX, offsetY) {
         if (arguments.length === 2) {
@@ -1842,6 +1872,7 @@
 
     // Init
     resize();
+    toggleMaximize('plan'); // Start with Crown View maximized by default
 
 </script>
 
