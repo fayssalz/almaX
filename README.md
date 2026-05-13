@@ -1,6 +1,6 @@
 # almaX: Parametric Diamond Scheme Generator
 
-**almaX** is a high-precision, web-based tool for generating and visualizing 2D diamond schemes. Designed with a focus on geometric accuracy and optical physics, it allows users to simulate the internal reflections and structural proportions of round brilliant diamonds.
+**almaX** is a high-precision, web-based tool for RBC proportions estimation and visualizing 2D diamond schemes. Designed with a focus on geometric accuracy and optical physics, it allows users to simulate the internal reflections and structural proportions of round brilliant diamonds.
 
 ## ✨ Core Features
 
