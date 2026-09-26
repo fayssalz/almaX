@@ -113,6 +113,33 @@
             pointer-events: none;
         }
 
+        .offset-buttons {
+            display: flex;
+            gap: 5px;
+        }
+
+        .offset-btn {
+            flex: 1;
+            padding: 6px 4px;
+            font-size: 0.75rem;
+            background: rgba(148, 163, 184, 0.2);
+            color: var(--text);
+        }
+
+        .offset-btn.active {
+            background: #facc15;
+            color: var(--bg-color);
+        }
+
+        .offset-btn.reset {
+            flex: 0 0 34px;
+        }
+
+        .offset-hint {
+            font-size: 0.7rem;
+            color: #64748b;
+        }
+
         .slider-bubble::after {
             content: "";
             position: absolute;
@@ -352,6 +379,16 @@
         <input type="range" id="lgfRatio" min="0.65" max="0.90" value="0.78" step="0.01">
     </div>
     
+    <div class="control-group">
+        <label>Overlay Offset</label>
+        <div class="offset-buttons">
+            <button type="button" class="offset-btn" id="btn-offset-reflect" title="Move the dashed pavilion circle">◌ Circle</button>
+            <button type="button" class="offset-btn" id="btn-offset-table" title="Move the table octagon">⬡ Table</button>
+            <button type="button" class="offset-btn reset" id="btn-offset-reset" title="Recenter offsets">↺</button>
+        </div>
+        <span class="offset-hint" id="offset-hint">Pick a shape, then drag on Crown View</span>
+    </div>
+
     <!-- Calculated Results -->
     <div class="results-panel">
         <div class="result-row">
@@ -477,6 +514,13 @@
     };
     const controlModes = { profile: 'diagram', plan: 'diagram' }; // 'diagram' or 'image'
 
+    // Offsets (in plan-view local units) for aligning shapes with off-center photos
+    const offsets = {
+        reflect: { x: 0, y: 0 },
+        table:   { x: 0, y: 0 }
+    };
+    let offsetTarget = null; // 'reflect' | 'table' | null
+
     // State for 3-Point Tool
     let threePointState = { active: false, view: null, points: [], mouseX: -100, mouseY: -100 };
 
@@ -514,9 +558,12 @@
         const max = parseFloat(pavDepthInput.max);
         const ratio = (config.pavDepthPct - min) / (max - min);
         const thumb = 16;
-        const track = pavDepthInput.offsetWidth - thumb;
-        pavBubble.style.left = `${thumb / 2 + ratio * track}px`;
+        const width = pavDepthInput.offsetWidth;
+        const track = width - thumb;
         pavBubble.textContent = `${config.pavDepthPct.toFixed(1)}%/${config.pavAngle.toFixed(2)}°`;
+        const half = pavBubble.offsetWidth / 2;
+        const target = thumb / 2 + ratio * track;
+        pavBubble.style.left = `${Math.max(half, Math.min(width - half, target))}px`;
     }
 
     // Main Draw Function
@@ -702,22 +749,32 @@
         // A standard round brilliant table is an octagon.
         // We rotate it so points align with the star facets
         const segments = 8;
+        const tableOff = offsets.table;
+        const reflectOff = offsets.reflect;
         ctx.beginPath();
         for (let i = 0; i <= segments; i++) {
             const theta = (i * 2 * Math.PI / segments) + (Math.PI / 8); // Rotate to offset
-            const x = Math.cos(theta) * tableRadius;
-            const y = Math.sin(theta) * tableRadius;
+            const x = Math.cos(theta) * tableRadius + tableOff.x;
+            const y = Math.sin(theta) * tableRadius + tableOff.y;
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
         }
-        ctx.stroke();
+        if (offsetTarget === 'table') {
+            ctx.save();
+            ctx.strokeStyle = '#facc15';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+            ctx.restore();
+        } else {
+            ctx.stroke();
+        }
 
         // 3. Draw Star Facets & Bezel Facets
         // This connects the table points to the girdle
         for (let i = 0; i < segments; i++) {
             const thetaTable = (i * 2 * Math.PI / segments) + (Math.PI / 8);
-            const tx = Math.cos(thetaTable) * tableRadius;
-            const ty = Math.sin(thetaTable) * tableRadius;
+            const tx = Math.cos(thetaTable) * tableRadius + tableOff.x;
+            const ty = Math.sin(thetaTable) * tableRadius + tableOff.y;
 
             const thetaGirdle = (i * 2 * Math.PI / segments) + (Math.PI / 8);
             const gx = Math.cos(thetaGirdle) * radius;
@@ -740,11 +797,14 @@
         const rReflect = tableRadius * (reflectionPct / 100);
         if (reflectionPct > 0) {
             ctx.beginPath();
-            ctx.arc(0, 0, rReflect, 0, Math.PI * 2);
+            ctx.arc(reflectOff.x, reflectOff.y, rReflect, 0, Math.PI * 2);
             ctx.setLineDash([3, 3]);
-            ctx.strokeStyle = 'RED';
+            ctx.strokeStyle = offsetTarget === 'reflect' ? '#facc15' : 'RED';
+            ctx.lineWidth = offsetTarget === 'reflect' ? 2.5 : 1.2;
             ctx.stroke();
             ctx.setLineDash([]);
+            ctx.lineWidth = 1.2;
+            ctx.strokeStyle = 'RED';
         }
 
         // --- H&A OPTICAL PHYSICS ENGINE ---
@@ -928,7 +988,7 @@
         ctx.textBaseline = 'middle';
         // Simple offset placement
         const labelY = y + (ccw ? -12 : 12);
-        ctx.fillText(val + '°', x + r + 5, labelY);
+        ctx.fillText(val.toFixed(2) + '°', x + r + 5, labelY);
     }
 
     // Helper to draw schematic dimension lines
@@ -1875,12 +1935,24 @@
         
         const dx = e.clientX - s.lastX;
         const dy = e.clientY - s.lastY;
-        
+        s.lastX = e.clientX;
+        s.lastY = e.clientY;
+
+        // While a shape is armed, plan-view drags nudge that shape instead of panning
+        if (offsetTarget && viewName === 'plan') {
+            const st = viewState.plan;
+            const cos = Math.cos(st.rotate);
+            const sin = Math.sin(st.rotate);
+            const o = offsets[offsetTarget];
+            o.x += (dx * cos + dy * sin) / st.scale;
+            o.y += (-dx * sin + dy * cos) / st.scale;
+            draw();
+            return;
+        }
+
         // For image, we move it directly; for diagram we move origin
         s.x += dx;
         s.y += dy;
-        s.lastX = e.clientX;
-        s.lastY = e.clientY;
         
         if (mode === 'image') updateImageTransform(viewName);
         draw();
@@ -1899,6 +1971,32 @@
         if(ov.elVid) ov.elVid.style.transform = transform;
         if(ov.elImg) ov.elImg.style.transform = transform;
     }
+
+    // Offset Controls
+    const offsetButtons = {
+        reflect: document.getElementById('btn-offset-reflect'),
+        table: document.getElementById('btn-offset-table')
+    };
+    const offsetHint = document.getElementById('offset-hint');
+
+    function setOffsetTarget(target) {
+        offsetTarget = offsetTarget === target ? null : target;
+        Object.keys(offsetButtons).forEach(key => {
+            offsetButtons[key].classList.toggle('active', offsetTarget === key);
+        });
+        offsetHint.textContent = offsetTarget
+            ? `Drag on Crown View to move the ${offsetTarget === 'table' ? 'table octagon' : 'dashed circle'}`
+            : 'Pick a shape, then drag on Crown View';
+        draw();
+    }
+
+    offsetButtons.reflect.addEventListener('click', () => setOffsetTarget('reflect'));
+    offsetButtons.table.addEventListener('click', () => setOffsetTarget('table'));
+    document.getElementById('btn-offset-reset').addEventListener('click', () => {
+        const targets = offsetTarget ? [offsetTarget] : Object.keys(offsets);
+        targets.forEach(key => { offsets[key].x = 0; offsets[key].y = 0; });
+        draw();
+    });
 
     // Event Listeners
     pavDepthInput.addEventListener('input', (e) => {
