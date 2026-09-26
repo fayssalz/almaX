@@ -94,6 +94,35 @@
             font-weight: bold;
         }
 
+        .slider-with-bubble {
+            position: relative;
+            padding-top: 22px;
+        }
+
+        .slider-bubble {
+            position: absolute;
+            top: 0;
+            transform: translateX(-50%);
+            background: var(--accent);
+            color: var(--bg-color);
+            font-size: 0.7rem;
+            font-weight: bold;
+            white-space: nowrap;
+            padding: 2px 6px;
+            border-radius: 4px;
+            pointer-events: none;
+        }
+
+        .slider-bubble::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 4px solid transparent;
+            border-top-color: var(--accent);
+        }
+
         /* Canvas Area */
         main {
             flex-grow: 1;
@@ -304,8 +333,11 @@
     </div>
 
     <div class="control-group">
-        <label>Pavilion Angle (°) <span id="val-pav">40.75</span></label>
-        <input type="range" id="pavAngle" min="35" max="50" value="40.75" step="0.1">
+        <label>Pavilion Depth (%) <span id="val-pav">43.1</span></label>
+        <div class="slider-with-bubble">
+            <span class="slider-bubble" id="bubble-pav">43.1%/40.75°</span>
+            <input type="range" id="pavDepth" min="35" max="60" value="43.1" step="0.1">
+        </div>
     </div>
 
     <div class="control-group">
@@ -408,6 +440,7 @@
     const config = {
         tablePct: 57,
         crownAngle: 34.5,
+        pavDepthPct: 43.1,
         pavAngle: 40.75,
         girdleThickPct: 3,
         lgfRatio: 0.78,
@@ -418,7 +451,6 @@
     const inputs = {
         tablePct: document.getElementById('tablePct'),
         crownAngle: document.getElementById('crownAngle'),
-        pavAngle: document.getElementById('pavAngle'),
         girdleThickPct: document.getElementById('girdleThick'),
         lgfRatio: document.getElementById('lgfRatio')
     };
@@ -471,13 +503,29 @@
     // Helper: Convert degrees to radians
     const rad = (deg) => deg * (Math.PI / 180);
 
+    // Pavilion depth (% of diameter) and pavilion angle are two views of the same value
+    const pavAngleFromDepth = (depthPct) => Math.atan(depthPct / 50) * (180 / Math.PI);
+
+    const pavDepthInput = document.getElementById('pavDepth');
+    const pavBubble = document.getElementById('bubble-pav');
+
+    function updatePavBubble() {
+        const min = parseFloat(pavDepthInput.min);
+        const max = parseFloat(pavDepthInput.max);
+        const ratio = (config.pavDepthPct - min) / (max - min);
+        const thumb = 16;
+        const track = pavDepthInput.offsetWidth - thumb;
+        pavBubble.style.left = `${thumb / 2 + ratio * track}px`;
+        pavBubble.textContent = `${config.pavDepthPct.toFixed(1)}%/${config.pavAngle.toFixed(2)}°`;
+    }
+
     // Main Draw Function
     function draw() {
         // 1. CALCULATE & UPDATE PERCENTAGES (Scale-Independent)
         // Using formulas independent of physical pixel size to prevent distortion when hiding containers
         const tableRatio = config.tablePct / 100;
         const crownPct = (1 - tableRatio) * 0.5 * Math.tan(rad(config.crownAngle)) * 100;
-        const pavPct = 0.5 * Math.tan(rad(config.pavAngle)) * 100;
+        const pavPct = config.pavDepthPct;
         const totalDepthPct = crownPct + config.girdleThickPct + pavPct;
 
         // Calculate Table Reflection Circle using exact optical ray-tracing
@@ -1853,6 +1901,15 @@
     }
 
     // Event Listeners
+    pavDepthInput.addEventListener('input', (e) => {
+        config.pavDepthPct = parseFloat(e.target.value);
+        config.pavAngle = pavAngleFromDepth(config.pavDepthPct);
+        const display = document.getElementById('val-pav');
+        if (display) display.textContent = config.pavDepthPct.toFixed(1);
+        updatePavBubble();
+        draw();
+    });
+
     Object.keys(inputs).forEach(key => {
         inputs[key].addEventListener('input', (e) => {
             config[key] = parseFloat(e.target.value);
@@ -1868,9 +1925,11 @@
     attachInteraction(cvsProfile, 'profile');
     attachInteraction(cvsPlan, 'plan');
 
-    window.addEventListener('resize', resize);
+    window.addEventListener('resize', () => { resize(); updatePavBubble(); });
 
     // Init
+    config.pavAngle = pavAngleFromDepth(config.pavDepthPct);
+    updatePavBubble();
     resize();
     toggleMaximize('plan'); // Start with Crown View maximized by default
 
