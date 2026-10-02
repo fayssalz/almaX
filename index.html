@@ -270,6 +270,21 @@
         .shutter-btn.active-cam {
             border-color: #38bdf8;
         }
+        .cam-mode-label {
+            position: absolute;
+            bottom: 95px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            font-size: 0.7rem;
+            padding: 3px 10px;
+            border-radius: 10px;
+            z-index: 41;
+            pointer-events: none;
+            display: none;
+            white-space: nowrap;
+        }
 
         .view-toolbar label.toolbar-btn {
             display: inline-flex;
@@ -389,6 +404,13 @@
         <span class="offset-hint" id="offset-hint">Pick a shape, then drag on Crown View</span>
     </div>
 
+    <div class="control-group">
+        <label>Octagon Auto-Fit</label>
+        <button type="button" id="btn-2pt-octagon" onclick="activateTwoPointOctagon()" title="Pick 2 opposite corners of the table octagon to auto-rotate & resize">⬡ 2-Point Table Align</button>
+        <button type="button" id="btn-2pt-cancel" style="display:none; background:#ef4444; color:#fff;" onclick="cancelTwoPointOctagon()">✕ Cancel</button>
+        <span class="offset-hint" id="2pt-hint" style="display:none;">Click 2 opposite corners of the octagon on the photo</span>
+    </div>
+
     <!-- Calculated Results -->
     <div class="results-panel">
         <div class="result-row">
@@ -436,6 +458,7 @@
         <canvas id="canvasProfile"></canvas>
         <video id="vid-profile" autoplay playsinline muted></video>
         <img id="img-profile" class="overlay-img" />
+        <div class="cam-mode-label" id="cam-label-profile"></div>
         <div class="shutter-btn" id="shutter-profile" onclick="handleShutter('profile')" title="Start/Capture"></div>
     </div>
 
@@ -453,6 +476,8 @@
             <span style="border-left:1px solid rgba(255,255,255,0.2); margin:0 4px;"></span>
             <button onclick="activateThreePoint('plan')" title="3-Point Circle Align">∴</button>
             <button onclick="cancelThreePoint('plan')" id="btn-3pt-cancel-plan" style="display:none; color:#ef4444;" title="Cancel 3-Point">✕</button>
+            <button onclick="activateTwoPointOctagon()" title="2-Point Octagon Align">⬡</button>
+            <button onclick="cancelTwoPointOctagon()" id="btn-2pt-cancel-plan" style="display:none; color:#ef4444;" title="Cancel 2-Point">✕</button>
             <button onclick="toggleLiveTracking('plan')" title="Loading AI...">⏳</button>
             <button onclick="resetAlignment('plan')" title="Reset Alignment">⟳</button>
             <button id="btn-maximize-plan" onclick="toggleMaximize('plan')" title="Toggle Fullscreen View">🗖</button>
@@ -460,6 +485,7 @@
         <canvas id="canvasPlan"></canvas>
         <video id="vid-plan" autoplay playsinline muted></video>
         <img id="img-plan" class="overlay-img" />
+        <div class="cam-mode-label" id="cam-label-plan"></div>
         <div class="shutter-btn" id="shutter-plan" onclick="handleShutter('plan')" title="Start/Capture"></div>
         <div class="legend">Parametric Render</div>
     </div>
@@ -494,8 +520,9 @@
 
     // Overlay State
     let sharedStream = null;
-    let videoDevices = [];
+    let videoDevices = []; // All cameras: rear cameras + selfie camera
     let currentDeviceIndex = 0;
+    let digitalZoomLevel = 1; // For camera digital zoom (especially selfie camera)
     const overlays = {
         profile: { type: null, elVid: document.getElementById('vid-profile'), elImg: document.getElementById('img-profile'), btnCam: document.getElementById('btn-cam-profile') },
         plan:    { type: null, elVid: document.getElementById('vid-plan'),    elImg: document.getElementById('img-plan'),    btnCam: document.getElementById('btn-cam-plan') }
@@ -523,6 +550,9 @@
 
     // State for 3-Point Tool
     let threePointState = { active: false, view: null, points: [], mouseX: -100, mouseY: -100 };
+
+    // State for 2-Point Octagon Tool
+    let twoPointOctState = { active: false, points: [], mouseX: -100, mouseY: -100 };
 
     // Tracking State
     const trackingState = {
@@ -650,6 +680,9 @@
             renderPlan(ctxPlan, cvsPlan.width, cvsPlan.height, radius, tableRadius, pavReflectionPct, crownReflectionPct, viewState.plan);
             if (threePointState.active && threePointState.view === 'plan') {
                 renderThreePointUI(ctxPlan, cvsPlan.width, cvsPlan.height);
+            }
+            if (twoPointOctState.active) {
+                renderTwoPointUI(ctxPlan, cvsPlan.width, cvsPlan.height);
             }
         }
     }
@@ -1027,6 +1060,101 @@
 
     // --- Camera and Overlay Logic ---
 
+    function isFrontDevice(d) {
+        if (!d) return false;
+        if (d.isVirtualFront) return true;
+        const lbl = (d.label || '').toLowerCase();
+        if (lbl.includes('front') || lbl.includes('user') || lbl.includes('selfie') || lbl.includes('forward')) return true;
+        try {
+            if (typeof d.getCapabilities === 'function') {
+                const caps = d.getCapabilities();
+                if (caps.facingMode && caps.facingMode.includes('user')) return true;
+            }
+        } catch(e) {}
+        return false;
+    }
+
+    function isRearDevice(d) {
+        if (!d) return false;
+        if (d.isVirtualRear) return true;
+        const lbl = (d.label || '').toLowerCase();
+        if (lbl.includes('back') || lbl.includes('rear') || lbl.includes('environment')) return true;
+        try {
+            if (typeof d.getCapabilities === 'function') {
+                const caps = d.getCapabilities();
+                if (caps.facingMode && caps.facingMode.includes('environment')) return true;
+            }
+        } catch(e) {}
+        return false;
+    }
+
+    function isCurrentCameraFront() {
+        if (videoDevices.length > 0 && currentDeviceIndex >= 0 && currentDeviceIndex < videoDevices.length) {
+            const dev = videoDevices[currentDeviceIndex];
+            if (isFrontDevice(dev)) return true;
+            if (isRearDevice(dev)) return false;
+        }
+        if (sharedStream && sharedStream.getVideoTracks().length > 0) {
+            const track = sharedStream.getVideoTracks()[0];
+            const s = typeof track.getSettings === 'function' ? track.getSettings() : {};
+            if (s.facingMode === 'user') return true;
+            if (s.facingMode === 'environment') return false;
+        }
+        return false;
+    }
+
+    async function populateVideoDevices(stream) {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+        try {
+            let allDevs = await navigator.mediaDevices.enumerateDevices();
+            let videoInputs = allDevs.filter(d => d.kind === 'videoinput');
+            if (videoInputs.length === 0) return;
+
+            let rear = videoInputs.filter(isRearDevice);
+            let front = videoInputs.filter(isFrontDevice);
+            let others = videoInputs.filter(d => !isRearDevice(d) && !isFrontDevice(d));
+
+            // If front camera was not explicitly identified in device labels,
+            // provide a fallback selfie entry so the user can always switch to it!
+            if (front.length === 0) {
+                front = [{ deviceId: '', label: 'Selfie Camera', isVirtualFront: true }];
+            }
+
+            if (rear.length > 0) {
+                videoDevices = [...rear, ...others, ...front];
+            } else if (others.length > 0) {
+                videoDevices = [...others, ...front];
+            } else {
+                videoDevices = [
+                    { deviceId: '', label: 'Rear Camera', isVirtualRear: true },
+                    { deviceId: '', label: 'Selfie Camera', isVirtualFront: true }
+                ];
+            }
+
+            // Deduplicate devices by deviceId (keep virtuals)
+            const seen = new Set();
+            videoDevices = videoDevices.filter(d => {
+                if (d.deviceId) {
+                    if (seen.has(d.deviceId)) return false;
+                    seen.add(d.deviceId);
+                }
+                return true;
+            });
+
+            // Match current active track
+            if (stream && stream.getVideoTracks().length > 0) {
+                const track = stream.getVideoTracks()[0];
+                const activeId = track.getSettings().deviceId;
+                const idx = videoDevices.findIndex(d => d.deviceId && d.deviceId === activeId);
+                if (idx >= 0) currentDeviceIndex = idx;
+            }
+
+            updateCameraUI();
+        } catch(e) {
+            console.warn("Camera enumeration failed", e);
+        }
+    }
+
     async function toggleCamera(viewName) {
         const ov = overlays[viewName];
         
@@ -1037,17 +1165,7 @@
 
         if (ov.type === 'camera') {
             // STOP Camera for this view
-            ov.elVid.srcObject = null;
-            ov.elVid.style.display = 'none';
-            ov.type = null;
-            document.getElementById(`shutter-${viewName}`).classList.remove('active-cam');
-
-            // If no other view is using camera, stop stream
-            if (overlays.profile.type !== 'camera' && overlays.plan.type !== 'camera' && sharedStream) {
-                sharedStream.getTracks().forEach(t => t.stop());
-                sharedStream = null;
-                updateZoomControls();
-            }
+            stopCameraForView(viewName);
         } else {
             // START Camera
             try {
@@ -1059,54 +1177,45 @@
                 if (sharedStream && sharedStream.active) {
                     stream = sharedStream;
                 } else {
-                    if (videoDevices.length === 0 && navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-                        try {
-                            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-                            let allDevs = await navigator.mediaDevices.enumerateDevices();
-                            videoDevices = allDevs.filter(d => d.kind === 'videoinput');
-                            let rear = videoDevices.filter(d => {
-                                const lbl = d.label.toLowerCase();
-                                return lbl.includes('back') || lbl.includes('rear') || lbl.includes('environment');
-                            });
-                            if (rear.length > 0) videoDevices = rear;
-                            
-                            updateCameraUI();
-                            const track = stream.getVideoTracks()[0];
-                            currentDeviceIndex = videoDevices.findIndex(d => d.deviceId === track.getSettings().deviceId);
-                            if (currentDeviceIndex < 0) currentDeviceIndex = 0;
-                        } catch(e) {
-                            console.warn("Initial camera enumeration failed", e);
-                        }
-                    }
+                    digitalZoomLevel = 1;
                     
-                    if (!stream) {
-                        if (videoDevices.length > 0) {
-                            stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: videoDevices[currentDeviceIndex].deviceId } } });
-                        } else if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-                        } else if (navigator.webkitGetUserMedia) {
-                            stream = await new Promise((resolve, reject) => {
-                                navigator.webkitGetUserMedia({ video: true }, resolve, reject);
-                            });
-                        } else if (navigator.mozGetUserMedia) {
-                            stream = await new Promise((resolve, reject) => {
-                                navigator.mozGetUserMedia({ video: true }, resolve, reject);
-                            });
+                    // Choose constraints based on currentDeviceIndex if previously selected
+                    let constraints = { video: { facingMode: 'environment' } };
+                    if (videoDevices.length > 0 && currentDeviceIndex >= 0 && currentDeviceIndex < videoDevices.length) {
+                        const targetDev = videoDevices[currentDeviceIndex];
+                        const isFront = isFrontDevice(targetDev);
+                        if (targetDev.deviceId) {
+                            constraints = { video: { deviceId: { exact: targetDev.deviceId } } };
                         } else {
-                            if (!window.isSecureContext) {
-                                throw new Error("INSECURE_CONTEXT");
-                            }
-                            throw new Error("API_MISSING");
+                            constraints = { video: { facingMode: isFront ? 'user' : 'environment' } };
                         }
                     }
+
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    } catch(conErr) {
+                        // Fallback to basic getUserMedia
+                        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                    }
+
+                    // Enumerate all devices (rear cameras + selfie camera)
+                    await populateVideoDevices(stream);
                 }
 
                 sharedStream = stream;
                 ov.elVid.srcObject = sharedStream;
                 ov.elVid.style.display = 'block';
                 ov.type = 'camera';
-                document.getElementById(`shutter-${viewName}`).classList.add('active-cam');
                 
+                // Mirror if front camera
+                const isFront = isCurrentCameraFront();
+                ov.elVid.style.transform = isFront ? 'scaleX(-1)' : '';
+
+                const shutterBtn = document.getElementById(`shutter-${viewName}`);
+                shutterBtn.classList.add('active-cam');
+                
+                updateCamLabel(viewName);
+                updateCameraUI();
                 setTimeout(updateZoomControls, 500);
             } catch (err) {
                 console.error("Error accessing camera:", err);
@@ -1118,6 +1227,43 @@
                 }
                 sharedStream = null;
             }
+        }
+    }
+
+    function stopCameraForView(viewName) {
+        const ov = overlays[viewName];
+        ov.elVid.srcObject = null;
+        ov.elVid.style.display = 'none';
+        ov.elVid.style.transform = '';
+        ov.type = null;
+        const shutterBtn = document.getElementById(`shutter-${viewName}`);
+        shutterBtn.classList.remove('active-cam');
+        updateCamLabel(viewName);
+
+        // If no other view is using camera, stop stream
+        if (overlays.profile.type !== 'camera' && overlays.plan.type !== 'camera' && sharedStream) {
+            sharedStream.getTracks().forEach(t => t.stop());
+            sharedStream = null;
+            digitalZoomLevel = 1;
+            updateZoomControls();
+        }
+    }
+
+    function updateCamLabel(viewName) {
+        const label = document.getElementById(`cam-label-${viewName}`);
+        if (!label) return;
+        const ov = overlays[viewName];
+        if (ov.type === 'camera') {
+            label.style.display = 'block';
+            if (isCurrentCameraFront()) {
+                label.textContent = '🤳 Selfie Camera';
+                label.style.background = 'rgba(167, 139, 250, 0.6)';
+            } else {
+                label.textContent = '📷 Rear Camera';
+                label.style.background = 'rgba(0,0,0,0.6)';
+            }
+        } else {
+            label.style.display = 'none';
         }
     }
 
@@ -1133,11 +1279,33 @@
         const activeViews = Object.keys(overlays).filter(v => overlays[v].type === 'camera');
         if (activeViews.length === 0) return;
         
+        const targetDev = videoDevices[currentDeviceIndex];
+        const isFront = isCurrentCameraFront();
+        digitalZoomLevel = 1;
+
         try {
-            sharedStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: videoDevices[currentDeviceIndex].deviceId } } });
+            let constraints;
+            if (targetDev && targetDev.deviceId) {
+                constraints = { video: { deviceId: { exact: targetDev.deviceId } } };
+            } else {
+                constraints = { video: { facingMode: isFront ? 'user' : 'environment' } };
+            }
+
+            try {
+                sharedStream = await navigator.mediaDevices.getUserMedia(constraints);
+            } catch(devErr) {
+                console.warn("Exact deviceId failed, falling back to facingMode", devErr);
+                sharedStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: isFront ? 'user' : 'environment' }
+                });
+            }
+
             activeViews.forEach(v => {
                 overlays[v].elVid.srcObject = sharedStream;
+                overlays[v].elVid.style.transform = isFront ? 'scaleX(-1)' : '';
+                updateCamLabel(v);
             });
+            updateCameraUI();
             setTimeout(updateZoomControls, 500);
         } catch(e) {
             console.error("Error switching camera", e);
@@ -1146,11 +1314,14 @@
     }
 
     function updateCameraUI() {
+        const isFront = isCurrentCameraFront();
         document.querySelectorAll('.btn-switch-cam').forEach(btn => {
             btn.style.display = videoDevices.length > 1 ? 'inline-block' : 'none';
+            btn.title = `Switch Camera (${isFront ? 'Selfie' : 'Rear'})`;
         });
     }
 
+    // Shutter button: toggle open camera - shoot/freeze
     function handleShutter(viewName) {
         const ov = overlays[viewName];
         if (ov.type !== 'camera') {
@@ -1172,6 +1343,7 @@
         const capabilities = typeof track.getCapabilities === 'function' ? track.getCapabilities() : {};
         
         if (capabilities.zoom) {
+            // Hardware (optical) zoom available
             const slider = document.getElementById('cameraZoom');
             slider.min = capabilities.zoom.min || 1;
             slider.max = capabilities.zoom.max || 10;
@@ -1188,8 +1360,34 @@
                 }).catch(err => console.error("Zoom apply error", err));
             };
         } else {
-            container.style.display = 'none';
+            // No hardware zoom: enable digital zoom (especially useful for selfie cam)
+            const slider = document.getElementById('cameraZoom');
+            slider.min = 1;
+            slider.max = 5;
+            slider.step = 0.1;
+            slider.value = digitalZoomLevel;
+            
+            document.getElementById('val-cameraZoom').textContent = digitalZoomLevel.toFixed(1) + 'x 🔍';
+            container.style.display = 'flex';
+            
+            slider.oninput = (e) => {
+                digitalZoomLevel = parseFloat(e.target.value);
+                document.getElementById('val-cameraZoom').textContent = digitalZoomLevel.toFixed(1) + 'x 🔍';
+                applyDigitalZoom();
+            };
         }
+    }
+
+    function applyDigitalZoom() {
+        // Apply digital zoom via CSS transform on all active camera video elements
+        const isFront = isCurrentCameraFront();
+        Object.keys(overlays).forEach(viewName => {
+            const ov = overlays[viewName];
+            if (ov.type === 'camera') {
+                const mirrorScale = isFront ? -1 : 1;
+                ov.elVid.style.transform = `scaleX(${mirrorScale}) scale(${digitalZoomLevel})`;
+            }
+        });
     }
 
     function handleImageUpload(event, viewName) {
@@ -1677,6 +1875,237 @@
         draw();
     }
 
+    // --- 2-Point Octagon Auto-Reposition Tool ---
+    // User picks 2 opposite corners of the octagon on the photo.
+    // This computes rotation and table % to fit the octagon, WITHOUT changing the big circle.
+    function activateTwoPointOctagon() {
+        // Cancel 3-point if active
+        if (threePointState.active) cancelThreePoint(threePointState.view);
+        
+        twoPointOctState = { active: true, points: [], mouseX: -100, mouseY: -100 };
+        cvsPlan.style.cursor = 'crosshair';
+        document.getElementById('btn-2pt-cancel').style.display = 'block';
+        const cancelPlan = document.getElementById('btn-2pt-cancel-plan');
+        if (cancelPlan) cancelPlan.style.display = 'block';
+        document.getElementById('2pt-hint').style.display = 'block';
+        document.getElementById('2pt-hint').textContent = 'Click point 1 of 2 (one octagon corner)';
+        draw();
+    }
+
+    function cancelTwoPointOctagon() {
+        twoPointOctState = { active: false, points: [], mouseX: -100, mouseY: -100 };
+        cvsPlan.style.cursor = 'grab';
+        document.getElementById('btn-2pt-cancel').style.display = 'none';
+        const cancelPlan = document.getElementById('btn-2pt-cancel-plan');
+        if (cancelPlan) cancelPlan.style.display = 'none';
+        document.getElementById('2pt-hint').style.display = 'none';
+        draw();
+    }
+
+    function handleTwoPointClick(e) {
+        const rect = cvsPlan.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        twoPointOctState.points.push({ x, y });
+        
+        if (twoPointOctState.points.length === 1) {
+            document.getElementById('2pt-hint').textContent = 'Click point 2 of 2 (the OPPOSITE octagon corner)';
+            draw();
+        } else if (twoPointOctState.points.length === 2) {
+            finishTwoPointOctagon();
+        }
+    }
+
+    function finishTwoPointOctagon() {
+        const p1 = twoPointOctState.points[0];
+        const p2 = twoPointOctState.points[1];
+        
+        // The two points are opposite corners of the octagon.
+        // The diagonal of a regular octagon spans across the center.
+        // Midpoint = center of octagon
+        const midX = (p1.x + p2.x) / 2;
+        const midY = (p1.y + p2.y) / 2;
+        
+        // Distance = diagonal of the octagon
+        const diag = Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2);
+        
+        // For a regular octagon, the diagonal (vertex to opposite vertex) = 2 * R
+        // where R is the circumradius. So tableRadius (circumradius) = diag / 2
+        const tableRadiusPx = diag / 2;
+        
+        // Angle of the diagonal determines the rotation.
+        // In the octagon drawing, the first vertex is at angle (PI/8) from the positive x-axis.
+        // Opposite vertices are separated by 4 steps = 4 * (2*PI/8) = PI radians.
+        // So if p1 is vertex i, the line p1→p2 makes angle = theta_i = i*(PI/4) + PI/8
+        // We measure the angle of the user's line, then compute what rotation offset
+        // the diagram needs to match.
+        const userAngle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+        
+        // The octagon vertices in the diagram code are drawn at angles:
+        //   theta_i = i * (2*PI/8) + PI/8 + viewState.plan.rotate
+        // A diagonal from vertex i to vertex (i+4) has direction theta_i.
+        // We need: theta_i = userAngle (mod PI, since the diagonal is symmetric)
+        // So: viewState.plan.rotate = userAngle - (PI/8) - k*(PI/4)  for the nearest k
+        // We pick the k that minimizes the rotation change.
+        const baseAngle = Math.PI / 8; // default octagon offset in renderPlan
+        let bestRotate = viewState.plan.rotate;
+        let bestDiff = Infinity;
+        for (let k = 0; k < 8; k++) {
+            const candidateRotate = userAngle - baseAngle - k * (Math.PI / 4);
+            // Normalize to nearest current rotation
+            let diff = candidateRotate - viewState.plan.rotate;
+            // Normalize diff to [-PI, PI]
+            diff = ((diff + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+            if (Math.abs(diff) < Math.abs(bestDiff)) {
+                bestDiff = diff;
+                bestRotate = viewState.plan.rotate + diff;
+            }
+        }
+        
+        // Apply rotation to the diagram (this rotates everything: circle + table + arrows)
+        viewState.plan.rotate = bestRotate;
+        
+        // Now compute table % from the pixel measurements.
+        // The big circle radius in pixels = (minDim * 0.8) / 2 * viewState.plan.scale
+        const minDimPlan = Math.min(cvsPlan.width, cvsPlan.height);
+        const circleRadiusPx = (minDimPlan * 0.8 / 2) * viewState.plan.scale;
+        
+        // Table % = (tableRadius / circleRadius) * 100
+        let newTablePct = (tableRadiusPx / circleRadiusPx) * 100;
+        
+        // Clamp to slider limits
+        newTablePct = Math.max(40, Math.min(70, newTablePct));
+        
+        // Update the table percentage
+        config.tablePct = newTablePct;
+        document.getElementById('tablePct').value = newTablePct;
+        document.getElementById('val-table').textContent = newTablePct.toFixed(1);
+        
+        // Also recenter the table offset relative to the octagon midpoint
+        // Convert the midpoint from screen coords to diagram-local coords
+        // Screen coords: midX, midY  
+        // Diagram center in screen coords: cvsPlan.width/2 + viewState.plan.x, cvsPlan.height/2 + viewState.plan.y
+        const diagCenterX = cvsPlan.width / 2 + viewState.plan.x;
+        const diagCenterY = cvsPlan.height / 2 + viewState.plan.y;
+        
+        // Offset from diagram center, in screen pixels
+        const offScreenX = midX - diagCenterX;
+        const offScreenY = midY - diagCenterY;
+        
+        // Convert to local diagram coords (undo scale and rotation)
+        const cos = Math.cos(viewState.plan.rotate);
+        const sin = Math.sin(viewState.plan.rotate);
+        const scale = viewState.plan.scale;
+        offsets.table.x = (offScreenX * cos + offScreenY * sin) / scale;
+        offsets.table.y = (-offScreenX * sin + offScreenY * cos) / scale;
+        
+        // Reset tool
+        cancelTwoPointOctagon();
+        draw();
+    }
+
+    function renderTwoPointUI(ctx, w, h) {
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        
+        // Instruction bar
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, h - 40, w, 40);
+        ctx.fillStyle = '#a78bfa';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const step = twoPointOctState.points.length + 1;
+        ctx.fillText(`Click corner ${step} of 2 on the octagon (opposite corners)`, w / 2, h - 20);
+
+        // Draw placed points
+        twoPointOctState.points.forEach((p, i) => {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#a78bfa';
+            ctx.fill();
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            // Label
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(`P${i+1}`, p.x, p.y - 12);
+        });
+
+        // Draw dashed line between the 2 points if both exist
+        if (twoPointOctState.points.length === 2) {
+            const a = twoPointOctState.points[0];
+            const b = twoPointOctState.points[1];
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.strokeStyle = '#a78bfa';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([6, 4]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        } else if (twoPointOctState.points.length === 1 && twoPointOctState.mouseX > 0) {
+            // Draw a preview line from placed point to mouse
+            const a = twoPointOctState.points[0];
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(twoPointOctState.mouseX, twoPointOctState.mouseY);
+            ctx.strokeStyle = 'rgba(167, 139, 250, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // Draw Loupe (Magnifier) for precise placement
+        if (twoPointOctState.mouseX > 0) {
+            const mx = twoPointOctState.mouseX;
+            const my = twoPointOctState.mouseY;
+            const zoom = 3;
+            const r = 60;
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(mx, my, r, 0, Math.PI * 2);
+            ctx.clip();
+
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(mx - r, my - r, r * 2, r * 2);
+
+            const ov = overlays.plan;
+            let source = null;
+            if (ov.type === 'camera' && ov.elVid.style.display !== 'none') source = ov.elVid;
+            else if (ov.type === 'image' && ov.elImg.style.display !== 'none') source = ov.elImg;
+
+            if (source) {
+                ctx.translate(mx, my);
+                ctx.scale(zoom, zoom);
+                ctx.translate(-mx, -my);
+                drawTransformedImage(ctx, source, imageState.plan, w, h);
+            }
+            ctx.restore();
+
+            ctx.beginPath();
+            ctx.arc(mx, my, r, 0, Math.PI * 2);
+            ctx.strokeStyle = '#a78bfa';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(mx - 10, my); ctx.lineTo(mx + 10, my);
+            ctx.moveTo(mx, my - 10); ctx.lineTo(mx, my + 10);
+            ctx.strokeStyle = '#a78bfa';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+
     // --- Freeze/Unfreeze Functionality ---
     function toggleFreeze(viewName) {
         const ov = overlays[viewName];
@@ -1685,33 +2114,50 @@
         if (trackingState[viewName].active) toggleLiveTracking(viewName);
 
         if (ov.type === 'camera') {
-            // 1. Freeze: Capture frame
+            // 1. Freeze: Capture frame (including digital zoom crop if active)
             const tempCanvas = document.createElement('canvas');
-            // Match video native resolution
             const w = ov.elVid.videoWidth;
             const h = ov.elVid.videoHeight;
             if(w === 0 || h === 0) return; // Video not ready
             
-            tempCanvas.width = w;
-            tempCanvas.height = h;
-            tempCanvas.getContext('2d').drawImage(ov.elVid, 0, 0, w, h);
+            // If digital zoom is active, crop the center region
+            const zoom = digitalZoomLevel;
+            const cropW = Math.floor(w / zoom);
+            const cropH = Math.floor(h / zoom);
+            const cropX = Math.floor((w - cropW) / 2);
+            const cropY = Math.floor((h - cropH) / 2);
+            
+            tempCanvas.width = cropW;
+            tempCanvas.height = cropH;
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            // If selfie, flip horizontally in the captured image
+            if (isCurrentCameraFront()) {
+                tempCtx.translate(cropW, 0);
+                tempCtx.scale(-1, 1);
+            }
+            tempCtx.drawImage(ov.elVid, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
             
             // Capture the video frame to the image element
             ov.elImg.src = tempCanvas.toDataURL('image/jpeg', 0.9);
-
             ov.elImg.style.display = 'block';
+            ov.elImg.style.transform = ''; // Reset any transforms on the frozen image
             
             // 2. Stop Camera logic manually to keep state clean
             ov.elVid.srcObject = null;
             ov.elVid.style.display = 'none';
+            ov.elVid.style.transform = '';
             ov.type = 'image';
-            document.getElementById(`shutter-${viewName}`).classList.remove('active-cam');
+            const shutterBtn = document.getElementById(`shutter-${viewName}`);
+            shutterBtn.classList.remove('active-cam');
+            updateCamLabel(viewName);
             
             // Stop shared stream if unused
             const otherView = viewName === 'profile' ? 'plan' : 'profile';
             if (overlays[otherView].type !== 'camera' && sharedStream) {
                 sharedStream.getTracks().forEach(t => t.stop());
                 sharedStream = null;
+                digitalZoomLevel = 1;
                 updateZoomControls();
             }
             
@@ -1776,7 +2222,9 @@
     function attachInteraction(canvas, viewName) {
         // Mouse Events
         canvas.addEventListener('mousedown', (e) => {
-            if (threePointState.active && threePointState.view === viewName) {
+            if (twoPointOctState.active && viewName === 'plan') {
+                handleTwoPointClick(e);
+            } else if (threePointState.active && threePointState.view === viewName) {
                 handleThreePointClick(e, viewName);
             } else {
                 startDrag(e, viewName);
@@ -1787,7 +2235,12 @@
         
         // Loupe Movement
         canvas.addEventListener('mousemove', (e) => {
-            if (threePointState.active && threePointState.view === viewName) {
+            if (twoPointOctState.active && viewName === 'plan') {
+                const rect = canvas.getBoundingClientRect();
+                twoPointOctState.mouseX = e.clientX - rect.left;
+                twoPointOctState.mouseY = e.clientY - rect.top;
+                draw();
+            } else if (threePointState.active && threePointState.view === viewName) {
                 const rect = canvas.getBoundingClientRect();
                 threePointState.mouseX = e.clientX - rect.left;
                 threePointState.mouseY = e.clientY - rect.top;
@@ -1795,9 +2248,15 @@
             }
         });
 
-        // Touch Events for 3-Point
+        // Touch Events for 2-Point and 3-Point
         canvas.addEventListener('touchstart', (e) => {
-             if (threePointState.active && threePointState.view === viewName) handleThreePointTouch(e, viewName);
+             if (twoPointOctState.active && viewName === 'plan') {
+                 e.preventDefault();
+                 const touch = e.touches[0];
+                 handleTwoPointClick({ clientX: touch.clientX, clientY: touch.clientY });
+             } else if (threePointState.active && threePointState.view === viewName) {
+                 handleThreePointTouch(e, viewName);
+             }
         }, { passive: false });
 
         // Wheel (Zoom + Rotate with Shift)
@@ -1848,6 +2307,13 @@
         }, { passive: false });
 
         canvas.addEventListener('touchmove', (e) => {
+            if (twoPointOctState.active && viewName === 'plan') {
+                const rect = canvas.getBoundingClientRect();
+                twoPointOctState.mouseX = e.touches[0].clientX - rect.left;
+                twoPointOctState.mouseY = e.touches[0].clientY - rect.top;
+                draw();
+                return;
+            }
             if (threePointState.active) {
                 // Update Loupe position for touch
                  const rect = canvas.getBoundingClientRect();
